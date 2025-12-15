@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cours de Coréen - Leçon 1</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js for audio synthesis -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        /* Base styles */
+        body {
+            font-family: 'Inter', 'Nanum Gothic', sans-serif;
+            overflow: hidden;
+            background-color: #0f172a; /* Slate 900 */
+        }
+        /* Custom highlight class for Navy theme */
+        .highlight {
+            color: #facc15; /* yellow-400 */
+            font-weight: 700;
+        }
+        
+        #app-container {
+            width: 100%;
+            max-width: 1000px;
+            background-color: #172554; /* blue-950 */
+            border-radius: 1rem;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3), 0 8px 10px -6px rgb(0 0 0 / 0.3);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            border: 1px solid #1e3a8a;
+            position: relative;
+        }
+
+        #page-content {
+            flex-grow: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            /* 하단 네비게이션 바 높이만큼 패딩 확보 */
+            padding-bottom: 6rem; 
+            color: #f1f5f9; /* slate-100 */
+            display: flex;
+            flex-direction: column;
+            align-items: center; 
+        }
+
+        /* Scrollbar styling */
+        #page-content::-webkit-scrollbar {
+            width: 8px;
+        }
+        #page-content::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        #page-content::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+
+        /* Mic Button Styles */
+        .mic-btn {
+            transition: all 0.2s ease-in-out;
+        }
+        .mic-btn.recording {
+            background-color: #ef4444 !important; /* Red-500 */
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.4); /* Glow effect */
+        }
+        .mic-btn.loading {
+            background-color: #6b7280 !important; /* Gray-500 */
+            cursor: not-allowed;
+            animation: pulse 1.5s infinite ease-in-out;
+        }
+        .mic-btn:disabled {
+            background-color: #9ca3af !important; /* Gray-400 */
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .nav-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 1rem;
+            background-color: #172554;
+            border-top: 1px solid #1e3a8a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            z-index: 10;
+        }
+        @media (min-width: 640px) {
+            .nav-container { padding: 1.5rem; }
+        }
+
+        #next-btn:disabled {
+            background-color: #334155;
+            color: #94a3b8;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        #prev-btn:disabled {
+             opacity: 0.5;
+             cursor: not-allowed;
+        }
+
+        .feedback-message {
+            min-height: 1.5rem;
+            font-weight: 600;
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        .vocab-card {
+            background-color: #ffffff;
+            color: #1f2937;
+        }
+
+        /* Unified Button Class */
+        .action-btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 9999px; /* rounded-full */
+            font-weight: 700; /* font-bold */
+            transition: all 0.2s;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            gap: 0.5rem; /* Icon gap */
+        }
+        .action-btn:active {
+            transform: scale(0.98);
+        }
+        /* Default Size */
+        .btn-default {
+            height: 3rem; /* h-12 */
+            font-size: 1rem; /* text-base */
+        }
+        /* Compact Size for Grid */
+        .btn-compact {
+            height: 2.5rem; /* h-10 */
+            font-size: 0.875rem; /* text-sm */
+            padding-left: 0.75rem;
+            padding-right: 0.75rem;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen h-screen p-2 sm:p-4">
+
+    <!-- App Container -->
+    <div id="app-container">
+        <!-- Page Content -->
+        <div id="page-content">
+            <!-- Dynamic Content -->
+        </div>
+
+        <!-- Navigation Bar -->
+        <div id="navigation" class="nav-container">
+             <div class="justify-self-start">
+                 <button id="prev-btn" class="bg-slate-700 text-white font-bold py-2 px-4 rounded-full shadow-lg transition duration-300 hover:bg-slate-600 text-sm sm:text-base">Précédent</button>
+             </div>
+            
+             <div class="flex-grow sm:flex-grow-0 sm:w-1/2 h-2 bg-slate-700 rounded-full overflow-hidden mx-2">
+                 <div id="progress-indicator" class="h-full bg-amber-400 transition-all duration-300"></div>
+             </div>
+            
+             <div class="justify-self-end flex gap-2">
+                 <button id="retry-btn" class="hidden bg-amber-500 text-white font-bold py-2 px-4 rounded-full shadow-lg transition duration-300 hover:bg-amber-600 text-sm sm:text-base">Réessayer</button>
+                 <button id="passer-btn" class="hidden bg-amber-500 text-white font-bold py-2 px-4 rounded-full shadow-lg transition duration-300 hover:bg-amber-600 text-sm sm:text-base">Passer</button>
+                 <button id="next-btn" class="bg-white text-indigo-900 font-bold py-2 px-5 rounded-full shadow-lg transition duration-300 hover:bg-gray-200 text-sm sm:text-base">
+                     Suivant
+                 </button>
+             </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Global Constants ---
+        const MAX_RECORD_TIME = 7000; // 7 seconds
+        const MAX_ATTEMPTS = 2; // Max 2 attempts
+
+        // Global Audio Tracker
+        let currentPlayingAudio = null;
+
+        function stopAllAudio() {
+            if (currentPlayingAudio) {
+                currentPlayingAudio.pause();
+                currentPlayingAudio.currentTime = 0;
+                currentPlayingAudio = null;
+            }
+        }
+
+        function playAudio(url) {
+            if (!url || url.startsWith('URL_PLACEHOLDER_')) {
+                console.warn('Audio URL is a placeholder or invalid:', url);
+                return;
+            }
+            try {
+                // Stop previous audio
+                stopAllAudio();
+
+                const audio = new Audio(url);
+                currentPlayingAudio = audio; // Track current
+                audio.play().catch(e => {
+                    console.error("Error playing audio:", e.name, e.message);
+                });
+                
+                audio.onended = () => {
+                    if (currentPlayingAudio === audio) {
+                        currentPlayingAudio = null;
+                    }
+                };
+            } catch (e) {
+                console.error("Error creating audio element:", e);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // --- 1. STATE AND DATA ---
+            let currentPage = 0;
+            let attempts = {}; 
+            let soundsReady = false;
+            let audioPlayTimeout = null;
+
+            // API Config
+            const BASE_44_ORIGIN = "https://coreeno.base44.app"; 
+            const CLOVA_API_FUNCTION_URL = BASE_44_ORIGIN + '/api/functions/naverClovaSpeech';
+            
+            // Audio synth
+            let pageTurnSynth, correctSound, wrongSound, completionSynth;
+            if (typeof Tone !== 'undefined') {
+                pageTurnSynth = new Tone.Synth().toDestination();
+                completionSynth = new Tone.PolySynth(Tone.Synth).toDestination();
+                correctSound = new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.01, decay: 0.2, sustain: 0.2, release: 0.2 } }).toDestination();
+                wrongSound = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.01, decay: 0.4, sustain: 0.1, release: 0.2 } }).toDestination();
+            }
+
+            const initAudioSynth = async () => {
+                if (soundsReady) return;
+                try {
+                    await Tone.start();
+                    soundsReady = true;
+                } catch (e) {
+                    console.error("Audio context could not be started: ", e);
+                }
+            };
+            document.body.addEventListener('click', initAudioSynth, { once: true });
+            document.body.addEventListener('touchstart', initAudioSynth, { once: true });
+            
+            // --- DATA ---
+            const pages = [
+                // Page 1: Cover
+                { 
+                    type: 'cover', 
+                    title: 'Les expressions du temps', 
+                    subtitle: 'Apprenons les expressions de temps à utiliser pour vos résolutions de 2026 !',
+                    image: 'https://res.cloudinary.com/de76i94ia/image/upload/v1765700701/Core%CC%81enO_logo_jlp255.png' 
+                },
+                // Page 2: Intro
+                { 
+                    type: 'text', 
+                    content: 'Bonjour, bienvenue dans le programme [Mes résolutions pour 2026] ! Dans ce programme, nous allons apprendre diverses expressions pour exprimer vos résolutions de nouvelle année en coréen. Lors du dernier cours, une séance pour écrire et parler vos propres résolutions est également prévue !', 
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765006165/audio_1_dg1yw1.mp3' 
+                },
+                // Page 3: Vocab List (Standard)
+                { 
+                    type: 'vocab_list', 
+                    // isCompact: false (Default)
+                    content: 'Alors, commençons par apprendre les expressions de temps que l\'on peut utiliser pour parler des résolutions pour la nouvelle année.',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765006166/audio_2_rxfapr.mp3',
+                    items: [
+                        { ko: '올해', fr: 'Cette année', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765004360/%E1%84%8B%E1%85%A9%E1%86%AF%E1%84%92%E1%85%A2_wwqhfr.mp3' },
+                        { ko: '내년', fr: 'Année prochaine', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765004355/%E1%84%82%E1%85%A2%E1%84%82%E1%85%A7%E1%86%AB_fmixan.mp3' }
+                    ]
+                },
+                // Page 4: Explain 올해
+                { 
+                    type: 'text_then_vocab', 
+                    content: 'Très bien ! <올해> signifie <cette année>. C\'est une expression que l\'on utilise pour parler des résolutions de l\'année en cours, alors que nous sommes déjà en 2026.',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765006169/audio_3_o68qty.mp3',
+                    ko: '올해', 
+                    fr: 'Cette année', 
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765004360/%E1%84%8B%E1%85%A9%E1%86%AF%E1%84%92%E1%85%A2_wwqhfr.mp3',
+                    subtitle: 'Répétez encore une fois'
+                },
+                // Page 5: Explain 내년
+                { 
+                    type: 'text_then_vocab', 
+                    content: '<내년> signifie <l\'année prochaine>. On l\'utilise en 2025 pour parler des souhaits pour 2026.',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765006171/audio_4_zdovzl.mp3',
+                    ko: '내년', 
+                    fr: 'Année prochaine', 
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765004355/%E1%84%82%E1%85%A2%E1%84%82%E1%85%A7%E1%86%AB_fmixan.mp3',
+                    subtitle: 'Répétez encore une fois'
+                },
+                // Page 6: Vocab List (Standard)
+                { 
+                    type: 'vocab_list', 
+                    // isCompact: false (Default)
+                    content: 'Pratiquons deux autres nouvelles expressions.',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765006173/audio_5_fgg9ye.mp3',
+                    items: [
+                        { ko: '새해', fr: 'Nouvelle année', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765004356/%E1%84%89%E1%85%A2%E1%84%92%E1%85%A2_jwkzbj.mp3' },
+                        { ko: '2026년', fr: 'L’année 2026', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765004352/2026%E1%84%82%E1%85%A7%E1%86%AB_lxsd90.mp3', altAnswers: ['이천이십육년'] }
+                    ]
+                },
+                // Page 7: Explain 새해
+                { 
+                    type: 'text_then_vocab', 
+                    content: 'Bravo ! <새해> signifie <une nouvelle année>. C\'est une expression utilisée en fin d\'année pour parler de l\'année suivante, ou en début d\'année pour parler de la nouvelle année qui commence.',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765789498/audio_6_ebvhnk.mp3',
+                    ko: '새해', 
+                    fr: 'Nouvelle année', 
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765004356/%E1%84%89%E1%85%A2%E1%84%92%E1%85%A2_jwkzbj.mp3',
+                    subtitle: 'Répétez encore une fois'
+                },
+                // Page 8: Explain 2026년
+                { 
+                    type: 'text_then_vocab', 
+                    content: 'Génial ! Quand vous dites l\'année, vous devez absolument ajouter le nom dépendant <년> après le chiffre.',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765006177/audio_7_pbeqvi.mp3',
+                    ko: '2026년', 
+                    fr: 'L’année 2026', 
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765004352/2026%E1%84%82%E1%85%A7%E1%86%AB_lxsd90.mp3',
+                    subtitle: 'Répétez encore une fois',
+                    altAnswers: ['이천이십육년'] 
+                },
+                // Page 9: Intro Particles
+                { 
+                    type: 'text_then_vocab', 
+                    content: 'Enfin, apprenons les particules qui permettent d\'utiliser ces expressions dans une phrase.',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765006179/audio_8_sejufg.mp3',
+                    ko: '에는', 
+                    fr: 'Particule de temps + emphase', 
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765792031/%E1%84%8B%E1%85%A6%E1%84%82%E1%85%B3%E1%86%AB_y6nujb.mp3' 
+                },
+                // Page 10: Grammar Explanation
+                { 
+                    type: 'text_then_vocab', 
+                    content: '<에> est une particule utilisée lorsque <le mot précédent est une expression de temps>. Et <는> est une particule auxiliaire d\'emphase qui signifie que votre résolution <est limitée> à ce temps-là.',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765006182/audio_9_wb7pz0.mp3',
+                    ko: '에는',
+                    fr: 'en ... (temps)',
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765792031/%E1%84%8B%E1%85%A6%E1%84%82%E1%85%B3%E1%86%AB_y6nujb.mp3'
+                },
+                // Page 11: Practice List (Compact Grid)
+                { 
+                    type: 'vocab_list', 
+                    // [Layout Flag] Compact Mode ONLY for Page 11
+                    isCompact: true,
+                    // [Fix] Full text restored
+                    content: 'Essayez de redire les quatre expressions apprises aujourd\'hui en ajoutant <에는>. Si le mot précédent se termine déjà par ㅐ ou ㅔ, la prononciation se répète, donc on peut avoir l\'impression que le <에 n\'est presque pas prononcé>.',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765006184/audio_10_pxwrep.mp3',
+                    items: [
+                        { ko: '올해에는', fr: 'Cette année', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765004364/%E1%84%8B%E1%85%A9%E1%86%AF%E1%84%92%E1%85%A2%E1%84%8B%E1%85%A6%E1%84%82%E1%85%B3%E1%86%AB_aiavcm.mp3' },
+                        { ko: '내년에는', fr: 'À l’année prochaine', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765004358/%E1%84%82%E1%85%A2%E1%84%82%E1%85%A7%E1%86%AB%E1%84%8B%E1%85%A6%E1%84%82%E1%85%B3%E1%86%AB_fzefpi.mp3' },
+                        { ko: '새해에는', fr: 'En nouvelle année', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765004362/%E1%84%89%E1%85%A2%E1%84%92%E1%85%A2%E1%84%8B%E1%85%A6%E1%84%82%E1%85%B3%E1%86%AB_znqb1y.mp3' },
+                        { ko: '2026년에는', fr: 'En 2026', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765004353/2026%E1%84%82%E1%85%A7%E1%86%AB%E1%84%8B%E1%85%A6%E1%84%82%E1%85%B3%E1%86%AB_z6gq4l.mp3', altAnswers: ['이천이십육년에는'] }
+                    ]
+                },
+                // Page 12: Finish
+                { 
+                    type: 'text', 
+                    title: 'Félicitations !', 
+                    content: 'C\'est tout pour le cours d\'aujourd\'hui. Dans la Leçon 2, apprenez à dire divers objectifs pour la nouvelle année. À bientôt !',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765006186/audio_11_ps7wrd.mp3'
+                }
+            ];
+            
+            const totalPages = pages.length;
+            
+            // --- Naver API Logic ---
+            let mediaRecorder;
+            let audioChunks = [];
+            let isRecording = false;
+            let recordingTimeout;
+
+            async function startRecording(quizIndex, itemIndex = 0) {
+                const attemptKey = `${quizIndex}-${itemIndex}`;
+                const currentAttempts = attempts[attemptKey] || 0;
+                if (currentAttempts >= MAX_ATTEMPTS) return; 
+
+                // Stop other audio
+                stopAllAudio();
+
+                if (isRecording) return;
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    alert("Votre navigateur ne supporte pas l'enregistrement audio.");
+                    return;
+                }
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    isRecording = true;
+                    audioChunks = [];
+                    let mimeType = 'audio/webm;codecs=opus';
+                    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'audio/webm';
+                    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
+                    
+                    mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType }); 
+                    mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+                    
+                    const btnId = `mic-btn-${quizIndex}-${itemIndex}`;
+                    const statusId = `speech-status-${quizIndex}-${itemIndex}`;
+                    
+                    mediaRecorder.onstart = () => {
+                        const btn = document.getElementById(btnId);
+                        if(btn) btn.classList.add('recording');
+                        
+                        const statusEl = document.getElementById(statusId);
+                        if(statusEl) {
+                            statusEl.textContent = "J'écoute...";
+                            statusEl.className = 'speech-status-indicator feedback-message text-center text-gray-300 text-xs sm:text-sm';
+                        }
+                        
+                        clearTimeout(recordingTimeout);
+                        recordingTimeout = setTimeout(() => { if (isRecording) stopRecording(quizIndex, itemIndex); }, MAX_RECORD_TIME); 
+                    };
+                    mediaRecorder.onstop = () => {
+                        isRecording = false;
+                        clearTimeout(recordingTimeout);
+                        const btn = document.getElementById(btnId);
+                        if(btn) {
+                            btn.classList.remove('recording');
+                            btn.classList.add('loading');
+                        }
+                        const statusEl = document.getElementById(statusId);
+                        if(statusEl) statusEl.textContent = "Évaluation...";
+
+                        const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+                        const reader = new FileReader();
+                        reader.readAsDataURL(audioBlob);
+                        reader.onloadend = () => {
+                            handlePronunciationEvaluation(quizIndex, itemIndex, reader.result);
+                        };
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+                    mediaRecorder.start();
+                } catch (err) {
+                    console.error("Error starting recording:", err);
+                    alert("Erreur microphone. Veuillez réessayer.");
+                }
+            }
+
+            function stopRecording(quizIndex, itemIndex = 0) {
+                clearTimeout(recordingTimeout);
+                if (mediaRecorder && isRecording) mediaRecorder.stop();
+            }
+
+            function normalizeText(text) {
+                if (typeof text !== 'string') return '';
+                return text.trim().replace(/[.,!?'\s]/g, '');
+            }
+
+            async function handlePronunciationEvaluation(quizIndex, itemIndex, audioBase64) {
+                const page = pages[quizIndex];
+                let targetData = page;
+                if (page.type === 'vocab_list' && page.items) {
+                    targetData = page.items[itemIndex];
+                }
+                
+                const btnId = `mic-btn-${quizIndex}-${itemIndex}`;
+                const statusId = `speech-status-${quizIndex}-${itemIndex}`;
+                
+                const feedbackEl = document.getElementById(statusId);
+                const micBtn = document.getElementById(btnId);
+                
+                const attemptKey = `${quizIndex}-${itemIndex}`;
+                if (!attempts[attemptKey]) attempts[attemptKey] = 0;
+                attempts[attemptKey]++;
+                const usedAttempts = attempts[attemptKey];
+
+                try {
+                    const response = await fetch(CLOVA_API_FUNCTION_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            audioBase64: audioBase64,
+                            languageCode: "Kor", 
+                            referenceText: targetData.ko
+                        })
+                    });
+        
+                    if (!response.ok) throw new Error("API Error");
+                    
+                    const result = await response.json(); 
+                    const transcribedText = result.text || '';
+                    const score = (result.assessment ? result.assessment.pronunciation_score : 0) || 0;
+
+                    const normalizedTranscribed = normalizeText(transcribedText);
+                    const normalizedReference = normalizeText(targetData.ko);
+                    
+                    let isTextMatch = false;
+                    const validAnswers = targetData.altAnswers ? [targetData.ko, ...targetData.altAnswers] : [targetData.ko];
+                    
+                    isTextMatch = validAnswers.some(ans => normalizeText(ans) === normalizedTranscribed);
+
+                    const isScorePass = score >= 80;
+                    
+                    const isCorrect = isTextMatch && isScorePass; 
+    
+                    if (isCorrect) {
+                        correctSound?.triggerAttackRelease('C5', '0.2s');
+                        if(feedbackEl) {
+                            feedbackEl.innerHTML = `Très bien ! (Score: ${score})`;
+                            feedbackEl.className = 'speech-status-indicator feedback-message text-center text-green-400 text-xs sm:text-sm';
+                        }
+                        if(micBtn) micBtn.disabled = true;
+                    } else {
+                        wrongSound?.triggerAttackRelease('A#2', '0.2s');
+                        if(feedbackEl) {
+                            feedbackEl.textContent = `J'ai entendu : "${transcribedText}" (Score: ${score}).`; 
+                            feedbackEl.className = 'speech-status-indicator feedback-message text-center text-red-400 text-xs sm:text-sm';
+                        }
+                        
+                        if (usedAttempts >= MAX_ATTEMPTS) {
+                             if(micBtn) micBtn.disabled = true;
+                             if(feedbackEl) {
+                                feedbackEl.innerHTML += ` <br>Tentatives épuisées.`;
+                             }
+                        } else {
+                             if(feedbackEl) {
+                                feedbackEl.innerHTML += ` <br>Réessayez (${usedAttempts}/${MAX_ATTEMPTS})`;
+                             }
+                        }
+                    }
+                    
+                } catch (error) {
+                    console.error("Eval error:", error); 
+                    if(feedbackEl) {
+                        feedbackEl.textContent = `Erreur de connexion.`;
+                        feedbackEl.className = 'speech-status-indicator feedback-message text-center text-red-400 text-xs sm:text-sm';
+                    }
+                } finally {
+                    if(micBtn) micBtn.classList.remove('loading');
+                }
+            }
+
+            function highlightText(text) {
+                return text.replace(/<([^>]+)>/g, '<span class="highlight">$1</span>')
+                           .replace(/\[([^\]]+)\]/g, '<span class="highlight">$1</span>');
+            }
+
+            // --- Component Creators ---
+
+            function createSpeechButton(quizIndex, data, itemIndex = 0, isCompact = false) {
+                const container = document.createElement('div');
+                container.className = 'flex flex-col items-center w-full'; 
+
+                const btn = document.createElement('button');
+                btn.id = `mic-btn-${quizIndex}-${itemIndex}`;
+                // Compact button style if isCompact is true
+                const btnSizeClass = isCompact ? 'action-btn btn-compact' : 'action-btn btn-default';
+                btn.className = `${btnSizeClass} bg-sky-600 text-white hover:bg-sky-500 shadow-md mic-btn`;
+                
+                const svgSize = isCompact ? '16' : '20';
+                btn.innerHTML = `Répétez <svg xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>`;
+                
+                const attemptKey = `${quizIndex}-${itemIndex}`;
+                if ((attempts[attemptKey] || 0) >= MAX_ATTEMPTS) {
+                    btn.disabled = true;
+                }
+
+                btn.onclick = () => {
+                    if(isRecording) stopRecording(quizIndex, itemIndex);
+                    else startRecording(quizIndex, itemIndex);
+                };
+
+                const status = document.createElement('p');
+                status.id = `speech-status-${quizIndex}-${itemIndex}`;
+                // Adjust height for compact mode
+                const statusHeight = isCompact ? 'h-8' : 'h-12';
+                const statusTextSize = isCompact ? 'text-xs' : 'text-sm';
+                status.className = `feedback-message text-center text-gray-400 ${statusHeight} flex items-center justify-center ${statusTextSize}`; 
+
+                container.appendChild(btn);
+                container.appendChild(status);
+                return container;
+            }
+
+            function createVocabListCard(data, quizIndex) {
+                // Layout logic: Grid 2x2 ONLY if isCompact is true
+                const isCompact = data.isCompact || false;
+                
+                const card = document.createElement('div');
+                
+                if (isCompact) {
+                    // --- COMPACT GRID (Page 11) ---
+                    card.className = 'w-full flex flex-col items-center'; // Transparent wrapper
+                    
+                    const listContainer = document.createElement('div');
+                    listContainer.className = 'w-full grid grid-cols-2 gap-2 sm:gap-4'; 
+
+                    data.items.forEach((item, idx) => {
+                        const itemRow = document.createElement('div');
+                        itemRow.className = 'flex flex-col items-center w-full bg-white p-2 sm:p-3 rounded-xl border border-gray-200 shadow-sm';
+
+                        const textContainer = document.createElement('div');
+                        textContainer.className = 'mb-2 text-center';
+
+                        const ko = document.createElement('h3');
+                        ko.className = 'text-lg sm:text-xl font-bold text-indigo-900 mb-0.5';
+                        ko.innerText = item.ko;
+                        
+                        const fr = document.createElement('p');
+                        fr.className = 'text-xs sm:text-sm text-gray-500';
+                        fr.innerText = item.fr;
+
+                        textContainer.appendChild(ko);
+                        textContainer.appendChild(fr);
+                        itemRow.appendChild(textContainer);
+
+                        const btnContainer = document.createElement('div');
+                        btnContainer.className = 'w-full flex flex-col gap-2';
+
+                        const audioBtn = document.createElement('button');
+                        audioBtn.className = 'action-btn btn-compact bg-indigo-600 text-white hover:bg-indigo-700 shadow-md';
+                        audioBtn.innerHTML = `Écoutez <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>`;
+                        audioBtn.onclick = () => playAudio(item.audio);
+
+                        btnContainer.appendChild(audioBtn);
+                        btnContainer.appendChild(createSpeechButton(quizIndex, item, idx, true));
+
+                        itemRow.appendChild(btnContainer);
+                        listContainer.appendChild(itemRow);
+                    });
+                    card.appendChild(listContainer);
+
+                } else {
+                    // --- STANDARD LIST (Page 3, 6) ---
+                    card.className = 'vocab-card rounded-2xl shadow-xl w-full p-4 flex flex-col items-center';
+                    
+                    const listContainer = document.createElement('div');
+                    listContainer.className = 'w-full flex flex-col gap-6'; 
+
+                    data.items.forEach((item, idx) => {
+                        const itemRow = document.createElement('div');
+                        itemRow.className = 'border-b border-gray-200 pb-6 last:border-0 flex flex-col items-center w-full';
+
+                        const textContainer = document.createElement('div');
+                        textContainer.className = 'mb-4 text-center';
+
+                        const ko = document.createElement('h3');
+                        ko.className = 'text-2xl font-bold text-indigo-900 mb-1';
+                        ko.innerText = item.ko;
+                        
+                        const fr = document.createElement('p');
+                        fr.className = 'text-gray-600';
+                        fr.innerText = item.fr;
+
+                        textContainer.appendChild(ko);
+                        textContainer.appendChild(fr);
+                        itemRow.appendChild(textContainer);
+
+                        const btnContainer = document.createElement('div');
+                        btnContainer.className = 'w-full flex flex-col gap-3'; 
+
+                        const audioBtn = document.createElement('button');
+                        audioBtn.className = 'action-btn btn-default bg-indigo-600 text-white hover:bg-indigo-700 shadow-md';
+                        audioBtn.innerHTML = 'Écoutez <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>';
+                        audioBtn.onclick = () => playAudio(item.audio);
+
+                        btnContainer.appendChild(audioBtn);
+                        btnContainer.appendChild(createSpeechButton(quizIndex, item, idx, false));
+
+                        itemRow.appendChild(btnContainer);
+                        listContainer.appendChild(itemRow);
+                    });
+                    card.appendChild(listContainer);
+                }
+
+                return card;
+            }
+
+            function createVocabCard(data, quizIndex) {
+                const card = document.createElement('div');
+                card.className = 'vocab-card rounded-2xl shadow-xl w-full p-4 sm:p-6 flex flex-col items-center';
+
+                if (data.subtitle) {
+                    const subtitleEl = document.createElement('p');
+                    subtitleEl.className = 'text-lg font-semibold text-gray-500 mb-4 text-center';
+                    subtitleEl.innerText = data.subtitle;
+                    card.appendChild(subtitleEl);
+                }
+
+                if (data.image) {
+                    const img = document.createElement('img');
+                    img.src = data.image;
+                    img.alt = data.ko;
+                    img.className = 'w-full h-32 sm:h-40 object-contain rounded-lg mb-4';
+                    card.appendChild(img);
+                }
+
+                const koText = document.createElement('h2');
+                koText.className = 'text-4xl font-bold text-indigo-900 mb-2 text-center';
+                koText.innerText = data.ko;
+                card.appendChild(koText);
+
+                const frText = document.createElement('p');
+                frText.className = 'text-xl text-gray-600 mb-6 text-center';
+                frText.innerText = data.fr;
+                card.appendChild(frText);
+
+                const btnContainer = document.createElement('div');
+                btnContainer.className = 'w-full flex flex-col gap-3';
+
+                const audioBtn = document.createElement('button');
+                audioBtn.className = 'action-btn btn-default bg-indigo-600 text-white hover:bg-indigo-700 shadow-md';
+                audioBtn.innerHTML = 'Écoutez <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>';
+                audioBtn.onclick = () => playAudio(data.audio);
+                
+                btnContainer.appendChild(audioBtn);
+                btnContainer.appendChild(createSpeechButton(quizIndex, data, 0, false));
+                
+                card.appendChild(btnContainer);
+
+                return card;
+            }
+
+            window.nextPage = function() {
+                if (document.getElementById('next-btn').disabled) return;
+                
+                stopAllAudio(); // Stop audio on page change
+
+                if (currentPage === pages.length - 2) {
+                     currentPage++;
+                     window.parent.postMessage({ type: 'lesson_complete' }, '*');
+                     if (completionSynth) completionSynth.triggerAttackRelease(["C5", "E5", "G5", "C6"], "4n");
+                     renderPage();
+                } 
+                else if (currentPage < pages.length - 1) {
+                    currentPage++;
+                    renderPage();
+                    playPageTurnSound();
+                }
+            }
+
+            window.prevPage = function() {
+                if (document.getElementById('prev-btn').disabled) return;
+                
+                stopAllAudio(); // Stop audio on page change
+
+                if (currentPage > 0) {
+                    currentPage--;
+                    renderPage();
+                    playPageTurnSound();
+                }
+            }
+
+            function updateNavButtons() {
+                const prevBtn = document.getElementById('prev-btn');
+                const nextBtn = document.getElementById('next-btn');
+                const navContainer = document.getElementById('navigation');
+                
+                if (currentPage === pages.length - 1) {
+                    navContainer.style.display = 'none';
+                    return;
+                } else {
+                    navContainer.style.display = 'flex';
+                }
+
+                prevBtn.disabled = (currentPage === 0);
+            }
+
+            function playPageTurnSound() {
+                if (pageTurnSynth) pageTurnSynth.triggerAttackRelease("C5", "8n", Tone.now());
+            }
+
+            function renderPage() {
+                if (currentPage >= totalPages) return;
+                
+                // Clear any pending autoplay timeout
+                if (audioPlayTimeout) {
+                    clearTimeout(audioPlayTimeout);
+                    audioPlayTimeout = null;
+                }
+                
+                // Stop any audio playing
+                stopAllAudio();
+
+                const pageData = pages[currentPage];
+                const contentEl = document.getElementById('page-content');
+                contentEl.innerHTML = ''; 
+                contentEl.scrollTop = 0; 
+                
+                // [Fix] Only align-top for standard lists (Page 3, 6). 
+                // Compact grid (Page 11) and other pages should be centered.
+                if (pageData.type === 'vocab_list' && !pageData.isCompact) {
+                     contentEl.classList.remove('justify-center');
+                     contentEl.classList.add('justify-start', 'pt-6'); 
+                } else {
+                     contentEl.classList.remove('justify-start', 'pt-6');
+                     contentEl.classList.add('justify-center');
+                }
+
+                if (pageData.audioFr && !pageData.audioFr.startsWith('URL_PLACEHOLDER_')) {
+                    audioPlayTimeout = setTimeout(() => {
+                        const audioEl = new Audio(pageData.audioFr);
+                        currentPlayingAudio = audioEl; // Track it
+                        audioEl.play().catch(e => console.warn("Autoplay blocked/failed", e));
+                        audioEl.onended = () => { if(currentPlayingAudio === audioEl) currentPlayingAudio = null; };
+                    }, 1000); 
+                }
+
+                switch (pageData.type) {
+                    case 'cover': {
+                        if (pageData.image) {
+                            const img = document.createElement('img');
+                            img.src = pageData.image;
+                            img.className = "w-32 h-32 mb-6 rounded-2xl shadow-lg border-4 border-amber-400 object-cover bg-white";
+                            img.onerror = () => { img.style.display = 'none'; console.log("Image not found: " + pageData.image); }; 
+                            contentEl.appendChild(img);
+                        }
+                        const title = document.createElement('h1');
+                        title.className = 'text-3xl sm:text-4xl font-bold text-white mb-4 text-center';
+                        title.innerText = pageData.title;
+                        contentEl.appendChild(title);
+
+                        const subtitle = document.createElement('p');
+                        subtitle.className = 'text-xl text-gray-300 text-center max-w-md';
+                        subtitle.innerHTML = highlightText(pageData.subtitle);
+                        contentEl.appendChild(subtitle);
+                        break;
+                    }
+                    case 'text': {
+                        if (pageData.title) {
+                            const title = document.createElement('h1');
+                            title.className = 'text-3xl font-bold text-white mb-6 text-center';
+                            title.innerText = pageData.title;
+                            contentEl.appendChild(title);
+                        }
+                        const text = document.createElement('p');
+                        text.className = 'text-xl text-gray-100 leading-relaxed text-center whitespace-pre-line'; 
+                        text.innerHTML = highlightText(pageData.content);
+                        contentEl.appendChild(text);
+                        break;
+                    }
+                    case 'vocab_list': {
+                         const text = document.createElement('p');
+                        text.className = 'text-lg text-gray-100 leading-relaxed text-center mb-6';
+                        text.innerHTML = highlightText(pageData.content);
+                        contentEl.appendChild(text);
+
+                        contentEl.appendChild(createVocabListCard(pageData, currentPage));
+                        break;
+                    }
+                    case 'text_then_vocab': {
+                        const text = document.createElement('p');
+                        text.className = 'text-lg text-gray-100 leading-relaxed text-center mb-6';
+                        text.innerHTML = highlightText(pageData.content);
+                        contentEl.appendChild(text);
+                        
+                        contentEl.appendChild(createVocabCard(pageData, currentPage));
+                        break;
+                    }
+                }
+                
+                updateNavButtons();
+                updateProgressBar();
+            }
+            
+            function updateProgressBar() {
+                const progress = (currentPage / (totalPages - 1)) * 100;
+                document.getElementById('progress-indicator').style.width = `${progress}%`;
+            }
+            
+            // Listeners
+            document.getElementById('prev-btn').addEventListener('click', window.prevPage);
+            document.getElementById('next-btn').addEventListener('click', window.nextPage);
+
+            renderPage();
+        });
+    </script>
+</body>
+</html>
