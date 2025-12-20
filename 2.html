@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cours de Coréen - Leçon 2</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js for audio synthesis -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        /* Base styles */
+        body {
+            font-family: 'Inter', 'Nanum Gothic', sans-serif;
+            overflow: hidden;
+            background-color: #0f172a; /* Slate 900 */
+        }
+        .highlight {
+            color: #facc15; /* yellow-400 */
+            font-weight: 700;
+        }
+        
+        #app-container {
+            width: 100%;
+            max-width: 1000px;
+            background-color: #172554; /* blue-950 */
+            border-radius: 1rem;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3), 0 8px 10px -6px rgb(0 0 0 / 0.3);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            border: 1px solid #1e3a8a;
+            position: relative;
+        }
+
+        #page-content {
+            flex-grow: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            /* Padding bottom handled dynamically in JS */
+            color: #f1f5f9; /* slate-100 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Scrollbar styling */
+        #page-content::-webkit-scrollbar { width: 8px; }
+        #page-content::-webkit-scrollbar-track { background: #1e293b; }
+        #page-content::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+
+        /* Mic Button Styles */
+        .mic-btn { transition: all 0.2s ease-in-out; }
+        .mic-btn.recording {
+            background-color: #ef4444 !important;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.4);
+        }
+        .mic-btn.loading {
+            background-color: #6b7280 !important;
+            cursor: not-allowed;
+            animation: pulse 1.5s infinite ease-in-out;
+        }
+        .mic-btn:disabled {
+            background-color: #9ca3af !important;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .nav-container {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            padding: 1rem;
+            background-color: #172554;
+            border-top: 1px solid #1e3a8a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            z-index: 10;
+        }
+        @media (min-width: 640px) { .nav-container { padding: 1.5rem; } }
+
+        #next-btn:disabled, #prev-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .feedback-message {
+            min-height: 1.5rem;
+            font-weight: 600;
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        .vocab-card { background-color: #ffffff; color: #1f2937; }
+
+        /* Unified Button Class */
+        .action-btn {
+            width: 100%;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 9999px; font-weight: 700; transition: all 0.2s;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); gap: 0.5rem;
+        }
+        .action-btn:active { transform: scale(0.98); }
+        .btn-default { height: 3rem; font-size: 1rem; }
+        .btn-compact { height: 2.5rem; font-size: 0.875rem; }
+
+        /* Text Color Classes */
+        .text-blue-600 { color: #2563eb; }
+        .text-red-600 { color: #dc2626; }
+        .text-purple-600 { color: #9333ea; }
+        .text-orange-600 { color: #ea580c; }
+        .text-teal-600 { color: #0d9488; }
+        .text-indigo-600 { color: #4f46e5; }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen h-screen p-2 sm:p-4">
+
+    <div id="app-container">
+        <div id="page-content"></div>
+
+        <div id="navigation" class="nav-container">
+             <div class="justify-self-start">
+                 <button id="prev-btn" class="bg-slate-700 text-white font-bold py-2 px-4 rounded-full shadow-lg transition duration-300 hover:bg-slate-600 text-sm sm:text-base">Précédent</button>
+             </div>
+             <div class="flex-grow sm:flex-grow-0 sm:w-1/2 h-2 bg-slate-700 rounded-full overflow-hidden mx-2">
+                 <div id="progress-indicator" class="h-full bg-amber-400 transition-all duration-300"></div>
+             </div>
+             <div class="justify-self-end flex gap-2">
+                 <button id="next-btn" class="bg-white text-indigo-900 font-bold py-2 px-5 rounded-full shadow-lg transition duration-300 hover:bg-gray-200 text-sm sm:text-base">Suivant</button>
+             </div>
+        </div>
+    </div>
+
+    <script>
+        const MAX_RECORD_TIME = 7000;
+        const MAX_ATTEMPTS = 2;
+        let currentPlayingAudio = null;
+        const WORD_COLORS = ["text-blue-600","text-red-600","text-purple-600","text-orange-600","text-teal-600","text-indigo-600"];
+
+        function stopAllAudio() {
+            if (currentPlayingAudio) {
+                currentPlayingAudio.pause();
+                currentPlayingAudio.currentTime = 0;
+                currentPlayingAudio = null;
+            }
+        }
+
+        function playAudio(url) {
+            if (!url || url.startsWith('URL_PLACEHOLDER_')) {
+                console.warn('Audio URL is a placeholder:', url);
+                return;
+            }
+            try {
+                stopAllAudio();
+                const audio = new Audio(url);
+                currentPlayingAudio = audio;
+                audio.play().catch(e => console.error("Audio error:", e));
+                audio.onended = () => { if (currentPlayingAudio === audio) currentPlayingAudio = null; };
+            } catch (e) {
+                console.error("Audio creation error:", e);
+            }
+        }
+
+        function formatStyledText(text) {
+            if (!text) return '';
+            let bracketCounter = 0;
+            return text.replace(/\[(.*?)\]/g, (match, word) => {
+                const colorClass = WORD_COLORS[bracketCounter % WORD_COLORS.length];
+                bracketCounter++;
+                return `<span class="font-bold ${colorClass}">${word}</span>`;
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            let currentPage = 0;
+            let attempts = {};
+            let soundsReady = false;
+            let audioPlayTimeout = null;
+            let openedItems = new Set();
+
+            const BASE_44_ORIGIN = "https://coreeno.base44.app"; 
+            const CLOVA_API_FUNCTION_URL = BASE_44_ORIGIN + '/api/functions/naverClovaSpeech';
+            
+            let pageTurnSynth, correctSound, wrongSound, completionSynth;
+            if (typeof Tone !== 'undefined') {
+                pageTurnSynth = new Tone.Synth().toDestination();
+                completionSynth = new Tone.PolySynth(Tone.Synth).toDestination();
+                correctSound = new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.01, decay: 0.2, sustain: 0.2, release: 0.2 } }).toDestination();
+                wrongSound = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.01, decay: 0.4, sustain: 0.1, release: 0.2 } }).toDestination();
+            }
+
+            const initAudioSynth = async () => {
+                if (soundsReady) return;
+                try { await Tone.start(); soundsReady = true; } catch (e) { console.error(e); }
+            };
+            document.body.addEventListener('click', initAudioSynth, { once: true });
+            document.body.addEventListener('touchstart', initAudioSynth, { once: true });
+            
+            // --- DATA: Leçon 2 ---
+            const pages = [
+                // 0. Cover
+                { 
+                    type: 'cover', 
+                    title: 'Expressions pour décrire ses objectifs', 
+                    subtitle: 'Découvrons des exemples pour vos bonnes résolutions du Nouvel An !',
+                    image: 'https://res.cloudinary.com/de76i94ia/image/upload/v1765700701/Core%CC%81enO_logo_jlp255.png' 
+                },
+                // 1. Intro
+                { 
+                    type: 'text', 
+                    content: 'Bonjour ! Dans cette leçon, nous allons découvrir les 7 bonnes résolutions les plus courantes pour la nouvelle année.', 
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765895052/audio_1_nugdkb.mp3' 
+                },
+                // 2. Menu
+                { 
+                    type: 'menu', 
+                    content: 'Cliquez sur l\'expression que vous souhaitez apprendre !',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765895053/audio_2_uvczxz.mp3',
+                    items: [
+                        { ko: '매일 한국어를 공부하다', fr: 'Étudier le coréen tous les jours', targetIndex: 3 },
+                        { ko: '한국에 여행을 가다', fr: 'Voyager en Corée du Sud', targetIndex: 4 },
+                        { ko: '책을 많이 읽다', fr: 'Lire beaucoup de livres', targetIndex: 5 },
+                        { ko: '다이어트를 하다', fr: 'Faire un régime', targetIndex: 6 },
+                        { ko: '담배를 끊다', fr: 'Arrêter de fumer', targetIndex: 7 },
+                        { ko: '취직에 성공하다', fr: 'Chercher un emploi', targetIndex: 8 },
+                        { ko: '매주 운동을 하다', fr: 'Faire d’exercice chaque semaine', targetIndex: 9 }
+                    ]
+                },
+                // 3. Item 1
+                { 
+                    type: 'detail',
+                    id: 'item1',
+                    ko: '매일 한국어를 공부하다', 
+                    fr: 'Étudier le coréen tous les jours',
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765894807/item_1_xfajdn.mp3',
+                    breakdown: '[매일] [한국어]를 [공부하다]',
+                    vocab: [
+                        { w: '매일', m: 'tous les jours' },
+                        { w: '한국어', m: 'langue coréenne' },
+                        { w: '공부하다', m: 'étudier' }
+                    ]
+                },
+                // 4. Item 2
+                { 
+                    type: 'detail',
+                    id: 'item2',
+                    ko: '한국에 여행을 가다', 
+                    fr: 'Voyager en Corée du Sud',
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765894807/item_2_ioddaj.mp3',
+                    breakdown: '[한국]에 [여행]을 [가다]',
+                    vocab: [
+                        { w: '한국', m: 'Corée du Sud' },
+                        { w: '여행', m: 'voyager' },
+                        { w: '가다', m: 'aller' }
+                    ]
+                },
+                // 5. Item 3
+                { 
+                    type: 'detail',
+                    id: 'item3',
+                    ko: '책을 많이 읽다', 
+                    fr: 'Lire beaucoup de livres',
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765894807/item_3_mxcwh1.mp3',
+                    breakdown: '[책]을 [많이] [읽다]',
+                    vocab: [
+                        { w: '책', m: 'livre' },
+                        { w: '많이', m: 'beaucoup (adverbe)' },
+                        { w: '읽다', m: 'lire' }
+                    ],
+                    note: '*”읽다” se prononce /익다/ - le “ㄹ” est complètement omis'
+                },
+                // 6. Item 4
+                { 
+                    type: 'detail',
+                    id: 'item4',
+                    ko: '다이어트를 하다', 
+                    fr: 'Faire un régime',
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765894807/item_4_siralp.mp3',
+                    breakdown: '[다이어트]를 [하다]',
+                    vocab: [
+                        { w: '다이어트', m: 'Régime (Diet)' },
+                        { w: '하다', m: 'Faire' }
+                    ]
+                },
+                // 7. Item 5
+                { 
+                    type: 'detail',
+                    id: 'item5',
+                    ko: '담배를 끊다', 
+                    fr: 'Arrêter de fumer',
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765894807/item_5_h54cmh.mp3',
+                    breakdown: '[담배]를 [끊다]',
+                    vocab: [
+                        { w: '담배', m: 'cigarette' },
+                        { w: '끊다', m: 'couper' }
+                    ],
+                    note: '*”끊다” se prononce /끈타/ - ㅎ et ㄷ se forment une liaison'
+                },
+                // 8. Item 6
+                { 
+                    type: 'detail',
+                    id: 'item6',
+                    ko: '취직에 성공하다', 
+                    fr: 'Chercher un emploi',
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765894808/item_6_ranj4p.mp3',
+                    breakdown: '[취직]에 [성공하다]',
+                    vocab: [
+                        { w: '취직', m: 'obtention d’emploi' },
+                        { w: '성공하다', m: 'réussir' }
+                    ]
+                },
+                // 9. Item 7
+                { 
+                    type: 'detail',
+                    id: 'item7',
+                    ko: '매주 운동을 하다', 
+                    fr: 'Faire d’exercice chaque semaine',
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765894808/item_7_nxghjr.mp3',
+                    breakdown: '[매주] [운동]을 [하다]',
+                    vocab: [
+                        { w: '매주', m: 'chaque semaine' },
+                        { w: '운동', m: 'sport' },
+                        { w: '하다', m: 'faire' }
+                    ]
+                },
+                // 10. Outro
+                { 
+                    type: 'text', 
+                    title: 'Félicitations !', 
+                    content: 'C\'est tout pour aujourd\'hui. Dans la leçon 3, entraînez-vous à utiliser ces expressions dans des phrases en ajoutant la terminaison du futur. À bientôt !',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765895053/audio_3_fdz52l.mp3'
+                }
+            ];
+            
+            const totalPages = pages.length;
+            
+            // --- Naver API Logic ---
+            let mediaRecorder, audioChunks = [], isRecording = false, recordingTimeout;
+
+            async function startRecording(pageIndex) {
+                const attemptKey = `page-${pageIndex}`;
+                if ((attempts[attemptKey] || 0) >= MAX_ATTEMPTS) return; 
+                stopAllAudio();
+
+                if (!navigator.mediaDevices) { alert("Microphone non supporté"); return; }
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    isRecording = true; audioChunks = [];
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                    
+                    const btn = document.getElementById(`mic-btn-${pageIndex}`);
+                    const status = document.getElementById(`speech-status-${pageIndex}`);
+                    
+                    mediaRecorder.onstart = () => {
+                        if(btn) btn.classList.add('recording');
+                        if(status) { status.textContent = "J'écoute..."; status.className = 'feedback-message text-center text-gray-300'; }
+                        clearTimeout(recordingTimeout);
+                        recordingTimeout = setTimeout(() => { if (isRecording) stopRecording(pageIndex); }, MAX_RECORD_TIME); 
+                    };
+                    mediaRecorder.onstop = () => {
+                        isRecording = false; clearTimeout(recordingTimeout);
+                        if(btn) { btn.classList.remove('recording'); btn.classList.add('loading'); }
+                        if(status) status.textContent = "Évaluation...";
+                        const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+                        const reader = new FileReader();
+                        reader.readAsDataURL(blob);
+                        reader.onloadend = () => handleEvaluation(pageIndex, reader.result);
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+                    mediaRecorder.start();
+                } catch (err) { console.error(err); alert("Erreur microphone"); }
+            }
+
+            function stopRecording(pageIndex) { clearTimeout(recordingTimeout); if (mediaRecorder && isRecording) mediaRecorder.stop(); }
+
+            async function handleEvaluation(pageIndex, audioBase64) {
+                const data = pages[pageIndex];
+                const btn = document.getElementById(`mic-btn-${pageIndex}`);
+                const status = document.getElementById(`speech-status-${pageIndex}`);
+                const attemptKey = `page-${pageIndex}`;
+                
+                if (!attempts[attemptKey]) attempts[attemptKey] = 0;
+                attempts[attemptKey]++;
+
+                try {
+                    const res = await fetch(CLOVA_API_FUNCTION_URL, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ audioBase64: audioBase64, languageCode: "Kor", referenceText: data.ko })
+                    });
+                    if (!res.ok) throw new Error("API Error");
+                    const result = await res.json();
+                    const score = result.assessment?.pronunciation_score || 0;
+                    
+                    if (score >= 80) {
+                        if(correctSound) correctSound.triggerAttackRelease('C5', '0.2s');
+                        if(status) { status.innerHTML = `Très bien ! (Score: ${score})`; status.className = 'feedback-message text-center text-green-400'; }
+                        if(btn) btn.disabled = true;
+                    } else {
+                        if(wrongSound) wrongSound.triggerAttackRelease('A#2', '0.2s');
+                        let msg = `Réessayez (Score: ${score})`;
+                        if (attempts[attemptKey] >= MAX_ATTEMPTS) { msg = "Tentatives épuisées."; if(btn) btn.disabled = true; }
+                        if(status) { status.textContent = msg; status.className = 'feedback-message text-center text-red-400'; }
+                    }
+                } catch (e) {
+                    console.error(e);
+                    if(status) status.textContent = "Erreur de connexion";
+                } finally {
+                    if(btn) btn.classList.remove('loading');
+                }
+            }
+
+            // --- Navigation & Rendering ---
+            window.goToPage = function(index) {
+                currentPage = index;
+                if (index >= 3 && index <= 9) {
+                    openedItems.add(index);
+                }
+                
+                renderPage();
+                
+                if (index === pages.length - 1) { 
+                    if (completionSynth) completionSynth.triggerAttackRelease(["C5", "E5", "G5", "C6"], "4n");
+                    window.parent.postMessage({ type: 'lesson_complete' }, '*');
+                } else {
+                    playPageTurnSound();
+                }
+            }
+
+            window.prevPage = function() {
+                if (currentPage === pages.length - 1) {
+                    goToPage(2);
+                } 
+                else if (currentPage > 0) {
+                    goToPage(currentPage - 1);
+                }
+            }
+
+            window.nextPage = function() {
+                if (currentPage === 2) {
+                    if (openedItems.size > 0) {
+                        goToPage(pages.length - 1); 
+                    }
+                }
+                else if (currentPage < pages.length - 1) {
+                    goToPage(currentPage + 1);
+                }
+            }
+
+            function playPageTurnSound() {
+                if (pageTurnSynth) pageTurnSynth.triggerAttackRelease("C5", "8n", Tone.now());
+            }
+
+            function renderPage() {
+                if (audioPlayTimeout) { clearTimeout(audioPlayTimeout); audioPlayTimeout = null; }
+                stopAllAudio();
+
+                const data = pages[currentPage];
+                const content = document.getElementById('page-content');
+                const nav = document.getElementById('navigation');
+                content.innerHTML = '';
+                
+                // [수정] 동적 패딩 및 정렬 로직 적용
+                const isNavHidden = (data.type === 'detail' || data.type === 'outro'); 
+                const paddingBottom = isNavHidden ? 'pb-6' : 'pb-24'; // 상세 페이지에서 패딩 줄임 -> 중앙 정렬 효과 상승
+                
+                content.className = `flex flex-col flex-grow p-6 overflow-y-auto ${paddingBottom} text-slate-100 w-full`;
+
+                // 중앙 정렬을 위한 내부 래퍼
+                const innerWrapper = document.createElement('div');
+                innerWrapper.className = 'w-full max-w-2xl my-auto flex flex-col items-center';
+
+                if (data.audioFr && !data.audioFr.startsWith('URL_')) {
+                    audioPlayTimeout = setTimeout(() => {
+                        const a = new Audio(data.audioFr);
+                        currentPlayingAudio = a;
+                        a.play().catch(e => console.warn(e));
+                        a.onended = () => { if(currentPlayingAudio === a) currentPlayingAudio = null; };
+                    }, 1000);
+                }
+
+                if (data.type === 'cover') {
+                    if(data.image) {
+                        const img = document.createElement('img'); img.src = data.image;
+                        img.className = "w-32 h-32 mb-6 rounded-2xl shadow-lg border-4 border-amber-400 bg-white object-cover";
+                        innerWrapper.appendChild(img);
+                    }
+                    const h1 = document.createElement('h1'); h1.className = "text-3xl font-bold text-center mb-4"; h1.innerText = data.title;
+                    innerWrapper.appendChild(h1);
+                    const p = document.createElement('p'); p.className = "text-center text-gray-300"; p.innerText = data.subtitle;
+                    innerWrapper.appendChild(p);
+                    nav.style.display = 'flex';
+                }
+                else if (data.type === 'text') {
+                    if(data.title) {
+                        const h1 = document.createElement('h1'); h1.className = "text-3xl font-bold mb-6"; h1.innerText = data.title; innerWrapper.appendChild(h1);
+                    }
+                    const p = document.createElement('p'); p.className = "text-xl text-center leading-relaxed whitespace-pre-line"; p.innerText = data.content;
+                    innerWrapper.appendChild(p);
+                    nav.style.display = 'flex';
+                }
+                else if (data.type === 'menu') {
+                    const p = document.createElement('p'); p.className = "text-lg text-center mb-6"; p.innerText = data.content;
+                    innerWrapper.appendChild(p);
+                    
+                    const listDiv = document.createElement('div');
+                    listDiv.className = "w-full grid grid-cols-2 sm:grid-cols-3 gap-3";
+                    
+                    data.items.forEach(item => {
+                        const btn = document.createElement('button');
+                        btn.className = "w-full bg-white text-indigo-900 p-4 rounded-xl shadow-md text-center transition hover:bg-gray-100 flex flex-col items-center justify-center h-24 sm:h-32";
+                        btn.onclick = () => goToPage(item.targetIndex);
+                        
+                        if (openedItems.has(item.targetIndex)) {
+                            btn.classList.add('ring-2', 'ring-amber-400');
+                        }
+
+                        const fr = document.createElement('span'); 
+                        fr.className = "text-base font-bold leading-tight"; 
+                        fr.innerText = item.fr;
+                        
+                        btn.appendChild(fr);
+                        listDiv.appendChild(btn);
+                    });
+                    innerWrapper.appendChild(listDiv);
+                    nav.style.display = 'flex';
+                }
+                else if (data.type === 'detail') {
+                    nav.style.display = 'none';
+
+                    const card = document.createElement('div');
+                    card.className = "bg-white rounded-2xl shadow-xl w-full p-6 text-gray-800 flex flex-col items-center gap-6";
+
+                    // 1. Audio
+                    const audioBtn = document.createElement('button');
+                    audioBtn.className = "action-btn btn-default bg-indigo-600 text-white hover:bg-indigo-700 shadow-md";
+                    audioBtn.innerHTML = 'Écoutez <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>';
+                    audioBtn.onclick = () => playAudio(data.audio);
+                    card.appendChild(audioBtn);
+
+                    // 2. Breakdown
+                    const bdDiv = document.createElement('div');
+                    bdDiv.className = "text-2xl font-bold text-center leading-relaxed text-indigo-900";
+                    bdDiv.innerHTML = formatStyledText(data.breakdown);
+                    card.appendChild(bdDiv);
+
+                    // 3. Vocab - Styled as Chips
+                    const vocabDiv = document.createElement('div');
+                    vocabDiv.className = "w-full flex flex-wrap gap-2 justify-center";
+                    
+                    data.vocab.forEach((v, index) => {
+                        const item = document.createElement('div');
+                        item.className = "bg-gray-50 border border-gray-200 px-3 py-2 rounded-xl text-sm sm:text-base shadow-sm flex items-center gap-2";
+                        
+                        const colorClass = WORD_COLORS[index % WORD_COLORS.length];
+                        
+                        item.innerHTML = `<span class="font-bold ${colorClass}">${v.w}</span><span class="text-gray-300">|</span><span class="text-gray-600">${v.m}</span>`;
+                        vocabDiv.appendChild(item);
+                    });
+                    card.appendChild(vocabDiv);
+
+                    // 4. Note
+                    if(data.note) {
+                        const noteP = document.createElement('p');
+                        noteP.className = "text-sm text-red-500 font-semibold text-center";
+                        noteP.innerText = data.note;
+                        card.appendChild(noteP);
+                    }
+
+                    // 5. Speech
+                    const speechDiv = document.createElement('div');
+                    speechDiv.className = "w-full flex flex-col items-center gap-2";
+                    const micBtn = document.createElement('button');
+                    micBtn.id = `mic-btn-${currentPage}`;
+                    micBtn.className = "action-btn btn-default bg-sky-600 text-white hover:bg-sky-500 shadow-md mic-btn";
+                    micBtn.innerHTML = `Répétez <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>`;
+                    
+                    const attemptKey = `page-${currentPage}`;
+                    if((attempts[attemptKey] || 0) >= MAX_ATTEMPTS) micBtn.disabled = true;
+
+                    micBtn.onclick = () => {
+                        if(isRecording) stopRecording(currentPage);
+                        else startRecording(currentPage);
+                    };
+                    const status = document.createElement('p');
+                    status.id = `speech-status-${currentPage}`;
+                    status.className = "feedback-message text-center text-gray-400";
+                    
+                    speechDiv.appendChild(micBtn);
+                    speechDiv.appendChild(status);
+                    card.appendChild(speechDiv);
+
+                    innerWrapper.appendChild(card);
+
+                    // 6. Back Button
+                    const backBtn = document.createElement('button');
+                    backBtn.className = "mt-6 bg-slate-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transition hover:bg-slate-500 w-full max-w-xs";
+                    backBtn.innerText = "Retourner à la liste";
+                    backBtn.onclick = () => goToPage(2); 
+                    innerWrapper.appendChild(backBtn);
+                }
+                else if (data.type === 'outro') {
+                    if(data.title) {
+                        const h1 = document.createElement('h1'); h1.className = "text-3xl font-bold mb-6"; h1.innerText = data.title; innerWrapper.appendChild(h1);
+                    }
+                    const p = document.createElement('p'); p.className = "text-xl text-center leading-relaxed whitespace-pre-line"; p.innerText = data.content;
+                    innerWrapper.appendChild(p);
+                    nav.style.display = 'none'; // Hide nav on last page
+                }
+
+                // Add wrapper to main content
+                content.appendChild(innerWrapper);
+
+                // Nav Buttons Logic
+                const prevBtn = document.getElementById('prev-btn');
+                const nextBtn = document.getElementById('next-btn');
+                const progress = document.getElementById('progress-indicator');
+                
+                prevBtn.disabled = (currentPage === 0);
+                
+                if (currentPage === 2) {
+                    nextBtn.innerText = "Terminer";
+                    nextBtn.className = "bg-amber-500 text-white font-bold py-2 px-5 rounded-full shadow-lg transition duration-300 hover:bg-amber-600 text-sm sm:text-base";
+                    if (openedItems.size === 0) {
+                        nextBtn.disabled = true;
+                        nextBtn.style.opacity = '0.5';
+                        nextBtn.style.cursor = 'not-allowed';
+                    } else {
+                        nextBtn.disabled = false;
+                        nextBtn.style.opacity = '1';
+                        nextBtn.style.cursor = 'pointer';
+                    }
+                } 
+                else if (currentPage === pages.length - 1) {
+                    nextBtn.style.display = 'none';
+                }
+                else {
+                    nextBtn.style.display = 'block';
+                    nextBtn.innerText = "Suivant";
+                    nextBtn.className = "bg-white text-indigo-900 font-bold py-2 px-5 rounded-full shadow-lg transition duration-300 hover:bg-gray-200 text-sm sm:text-base";
+                    nextBtn.disabled = false;
+                    nextBtn.style.opacity = '1';
+                    nextBtn.style.cursor = 'pointer';
+                }
+
+                let pct = 0;
+                if(currentPage === 0) pct = 5;
+                else if(currentPage === 1) pct = 10;
+                else if(currentPage === 2) pct = 20;
+                else if(currentPage >= 3 && currentPage <= 9) pct = 20 + ((currentPage-2) * 10);
+                else pct = 100;
+                progress.style.width = `${pct}%`;
+            }
+
+            document.getElementById('prev-btn').addEventListener('click', window.prevPage);
+            document.getElementById('next-btn').addEventListener('click', window.nextPage);
+            renderPage();
+        });
+    </script>
+</body>
+</html>
