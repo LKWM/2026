@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cours de Coréen - Leçon 3</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js for audio synthesis -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        /* Base styles */
+        body {
+            font-family: 'Inter', 'Nanum Gothic', sans-serif;
+            overflow: hidden;
+            background-color: #0f172a; /* Slate 900 */
+        }
+        .highlight {
+            color: #facc15; /* yellow-400 */
+            font-weight: 700;
+        }
+        
+        #app-container {
+            width: 100%;
+            max-width: 1000px;
+            background-color: #172554; /* blue-950 */
+            border-radius: 1rem;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3), 0 8px 10px -6px rgb(0 0 0 / 0.3);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            border: 1px solid #1e3a8a;
+            position: relative;
+        }
+
+        #page-content {
+            flex-grow: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            padding-bottom: 6rem; 
+            color: #f1f5f9; /* slate-100 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            /* Dynamic justification via JS */
+        }
+
+        /* Scrollbar styling */
+        #page-content::-webkit-scrollbar { width: 8px; }
+        #page-content::-webkit-scrollbar-track { background: #1e293b; }
+        #page-content::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+
+        /* Mic Button Styles */
+        .mic-btn { transition: all 0.2s ease-in-out; }
+        .mic-btn.recording {
+            background-color: #ef4444 !important;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.4);
+        }
+        .mic-btn.loading {
+            background-color: #6b7280 !important;
+            cursor: not-allowed;
+            animation: pulse 1.5s infinite ease-in-out;
+        }
+        .mic-btn:disabled {
+            background-color: #9ca3af !important;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .nav-container {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            padding: 1rem;
+            background-color: #172554;
+            border-top: 1px solid #1e3a8a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            z-index: 10;
+        }
+        @media (min-width: 640px) { .nav-container { padding: 1.5rem; } }
+
+        #next-btn:disabled, #prev-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .feedback-message {
+            min-height: 1.5rem;
+            font-weight: 600;
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        .vocab-card { background-color: #ffffff; color: #1f2937; }
+
+        /* Unified Button Class */
+        .action-btn {
+            width: 100%;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 9999px; font-weight: 700; transition: all 0.2s;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); gap: 0.5rem;
+        }
+        .action-btn:active { transform: scale(0.98); }
+        .btn-default { height: 3rem; font-size: 1rem; }
+        .btn-compact { height: 2.5rem; font-size: 0.875rem; }
+
+        /* Text Color Classes */
+        .text-blue-600 { color: #2563eb; }
+        .text-red-600 { color: #dc2626; }
+        .text-purple-600 { color: #9333ea; }
+        .text-orange-600 { color: #ea580c; }
+        .text-teal-600 { color: #0d9488; }
+        .text-indigo-600 { color: #4f46e5; }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen h-screen p-2 sm:p-4">
+
+    <div id="app-container">
+        <div id="page-content"></div>
+
+        <div id="navigation" class="nav-container">
+             <div class="justify-self-start">
+                 <button id="prev-btn" class="bg-slate-700 text-white font-bold py-2 px-4 rounded-full shadow-lg transition duration-300 hover:bg-slate-600 text-sm sm:text-base">Précédent</button>
+             </div>
+             <div class="flex-grow sm:flex-grow-0 sm:w-1/2 h-2 bg-slate-700 rounded-full overflow-hidden mx-2">
+                 <div id="progress-indicator" class="h-full bg-amber-400 transition-all duration-300"></div>
+             </div>
+             <div class="justify-self-end flex gap-2">
+                 <button id="next-btn" class="bg-white text-indigo-900 font-bold py-2 px-5 rounded-full shadow-lg transition duration-300 hover:bg-gray-200 text-sm sm:text-base">Suivant</button>
+             </div>
+        </div>
+    </div>
+
+    <script>
+        const MAX_RECORD_TIME = 7000;
+        const MAX_ATTEMPTS = 2;
+        let currentPlayingAudio = null;
+        const WORD_COLORS = ["text-blue-600","text-red-600","text-purple-600","text-orange-600","text-teal-600","text-indigo-600"];
+
+        function stopAllAudio() {
+            if (currentPlayingAudio) {
+                currentPlayingAudio.pause();
+                currentPlayingAudio.currentTime = 0;
+                currentPlayingAudio = null;
+            }
+        }
+
+        function playAudio(url) {
+            if (!url || url.startsWith('URL_PLACEHOLDER_')) {
+                console.warn('Audio URL is a placeholder:', url);
+                return;
+            }
+            try {
+                stopAllAudio();
+                const audio = new Audio(url);
+                currentPlayingAudio = audio;
+                audio.play().catch(e => console.error("Audio error:", e));
+                audio.onended = () => { if (currentPlayingAudio === audio) currentPlayingAudio = null; };
+            } catch (e) {
+                console.error("Audio creation error:", e);
+            }
+        }
+
+        function formatStyledText(text) {
+            if (!text) return '';
+            let bracketCounter = 0;
+            return text.replace(/\[(.*?)\]/g, (match, word) => {
+                const colorClass = WORD_COLORS[bracketCounter % WORD_COLORS.length];
+                bracketCounter++;
+                return `<span class="font-bold ${colorClass}">${word}</span>`;
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            let currentPage = 0;
+            let attempts = {};
+            let soundsReady = false;
+            let audioPlayTimeout = null;
+
+            const BASE_44_ORIGIN = "https://coreeno.base44.app"; 
+            const CLOVA_API_FUNCTION_URL = BASE_44_ORIGIN + '/api/functions/naverClovaSpeech';
+            
+            let pageTurnSynth, correctSound, wrongSound, completionSynth;
+            if (typeof Tone !== 'undefined') {
+                pageTurnSynth = new Tone.Synth().toDestination();
+                completionSynth = new Tone.PolySynth(Tone.Synth).toDestination();
+                correctSound = new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.01, decay: 0.2, sustain: 0.2, release: 0.2 } }).toDestination();
+                wrongSound = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.01, decay: 0.4, sustain: 0.1, release: 0.2 } }).toDestination();
+            }
+
+            const initAudioSynth = async () => {
+                if (soundsReady) return;
+                try { await Tone.start(); soundsReady = true; } catch (e) { console.error(e); }
+            };
+            document.body.addEventListener('click', initAudioSynth, { once: true });
+            document.body.addEventListener('touchstart', initAudioSynth, { once: true });
+            
+            // --- DATA: Leçon 3 ---
+            const pages = [
+                // 0. Cover
+                { 
+                    type: 'cover', 
+                    title: 'Parler de ses objectifs au futur', 
+                    subtitle: 'Exprimez vos résolutions du Nouvel An en utilisant la conjugaison du futur !',
+                    image: 'https://res.cloudinary.com/de76i94ia/image/upload/v1765700701/Core%CC%81enO_logo_jlp255.png' 
+                },
+                // 1. Intro
+                { 
+                    type: 'text', 
+                    content: 'Bonjour ! Dans cette leçon, nous allons exprimer nos résolutions du Nouvel An en ajoutant la terminaison du futur aux 7 expressions apprises dans la leçon 2.', 
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1766341952/audio_1_rentna.mp3'
+                },
+                // 2. Grammar Explanation Part 1 (Page 2-1)
+                {
+                    type: 'grammar',
+                    content: 'Pour mettre un verbe au futur, on ajoute [-ㄹ/을 것이다] au radical du verbe.',
+                    rules: [
+                        "Si le radical se termine par une voyelle, on ajoute la consonne finale 'ㄹ'.",
+                        "Si le radical se termine par une consonne, on ajoute '을'.",
+                        "L'auxiliaire se conjugue différemment selon le niveau de politesse choisi vis-à-vis de l'interlocuteur."
+                    ],
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1766213996/audio_2-1_gbj6og.mp3',
+                    examples: [] // Empty
+                },
+                // 3. Grammar Explanation Part 2 (Page 2-2)
+                {
+                    type: 'grammar',
+                    content: "Entraînons-nous à la conjugaison du futur avec le verbe '하다' comme exemple.",
+                    rules: [], // Empty
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1766213996/audio_2-2_qybiq2.mp3',
+                    examples: [
+                        { ko: '할 겁니다', fr: 'Parler de la manière formelle', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1766212734/%E1%84%92%E1%85%A1%E1%86%AF_%E1%84%80%E1%85%A5%E1%86%B8%E1%84%82%E1%85%B5%E1%84%83%E1%85%A1_s4kyrz.mp3' },
+                        { ko: '할 거예요', fr: 'Parler de la manière polie', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1766212733/%E1%84%92%E1%85%A1%E1%86%AF_%E1%84%80%E1%85%A5%E1%84%8B%E1%85%A8%E1%84%8B%E1%85%AD_f8g7ri.mp3' },
+                        { ko: '할 거야', fr: 'Parler de la manière informelle', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1766212732/%E1%84%92%E1%85%A1%E1%86%AF_%E1%84%80%E1%85%A5%E1%84%8B%E1%85%A3_phkqyk.mp3' }
+                    ]
+                },
+                // 4. Practice 1 (Merged Intro + Practice 1)
+                {
+                    type: 'practice',
+                    content: 'Complétons maintenant les phrases en ajoutant la terminaison du futur aux expressions vues lors du cours précédent ! Dans les exemples, les verbes ont été conjugués au style poli.',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1766212775/audio_3_erruuu.mp3',
+                    original: {
+                        ko: '매일 한국어를 공부하다',
+                        fr: 'Étudier le coréen tous les jours', // Capitalized
+                        audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765894807/item_1_xfajdn.mp3'
+                    },
+                    futur: {
+                        ko: '매일 한국어를 공부할 거예요.',
+                        fr: 'Je vais étudier le coréen tous les jours.', // Je vais...
+                        audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1766212724/item_1_futur_xb7yol.mp3'
+                    },
+                    explanation: "Comme le verbe est ‘공부하다’, on a complété la phrase en ajoutant ‘ㄹ 거예요’ au radical ‘공부하’." // Translated
+                },
+                // 5. Practice 2
+                {
+                    type: 'practice',
+                    original: {
+                        ko: '한국에 여행을 가다',
+                        fr: 'Voyager en Corée du Sud', 
+                        audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765894807/item_2_ioddaj.mp3'
+                    },
+                    futur: {
+                        ko: '한국에 여행을 갈 거예요.',
+                        fr: 'Je vais voyager en Corée du Sud.',
+                        audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1766212724/item_2_futur_sdpdfk.mp3'
+                    },
+                    explanation: "Comme le verbe est ‘가다’, on a complété la phrase en ajoutant ‘ㄹ 거예요’ au radical ‘가’."
+                },
+                // 6. Practice 3
+                {
+                    type: 'practice',
+                    original: {
+                        ko: '책을 많이 읽다',
+                        fr: 'Lire beaucoup de livres', 
+                        audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765894807/item_3_mxcwh1.mp3'
+                    },
+                    futur: {
+                        ko: '책을 많이 읽을 거예요.',
+                        fr: 'Je vais lire beaucoup de livres.',
+                        audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1766212724/item_3_futur_oigi0z.mp3'
+                    },
+                    explanation: "Comme le verbe est ‘읽다’, on a complété la phrase en ajoutant ‘을 거예요’ au radical ‘읽’."
+                },
+                // 7. Practice 4
+                {
+                    type: 'practice',
+                    original: {
+                        ko: '다이어트를 하다',
+                        fr: 'Faire un régime', 
+                        audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765894807/item_4_siralp.mp3'
+                    },
+                    futur: {
+                        ko: '다이어트를 할 거예요.',
+                        fr: 'Je vais faire un régime.',
+                        audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1766212725/item_4_futur_ofzpfh.mp3'
+                    },
+                    explanation: "Comme le verbe est ‘하다’, on a complété la phrase en ajoutant ‘ㄹ 거예요’ au radical ‘하’."
+                },
+                // 8. Practice 5
+                {
+                    type: 'practice',
+                    original: {
+                        ko: '담배를 끊다',
+                        fr: 'Arrêter de fumer', 
+                        audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765894807/item_5_h54cmh.mp3'
+                    },
+                    futur: {
+                        ko: '담배를 끊을 거예요.',
+                        fr: 'Je vais arrêter de fumer.',
+                        audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1766212728/item_5_futur_s2mthb.mp3'
+                    },
+                    explanation: "Comme le verbe est ‘끊다’, on a complété la phrase en ajoutant ‘을 거예요’ au radical ‘끊’."
+                },
+                // 9. Practice 6
+                {
+                    type: 'practice',
+                    original: {
+                        ko: '취직에 성공하다',
+                        fr: 'Chercher un emploi', 
+                        audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765894808/item_6_ranj4p.mp3'
+                    },
+                    futur: {
+                        ko: '취직에 성공할 거예요.',
+                        fr: 'Je vais chercher un emploi.',
+                        audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1766212729/item_6_futur_kwfsoz.mp3'
+                    },
+                    explanation: "Comme le verbe est ‘취직하다’, on a complété la phrase en ajoutant ‘ㄹ 거예요’ au radical ‘취직하’."
+                },
+                // 10. Practice 7
+                {
+                    type: 'practice',
+                    original: {
+                        ko: '매주 운동을 하다',
+                        fr: 'Faire d’exercice chaque semaine', 
+                        audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1765894808/item_7_nxghjr.mp3'
+                    },
+                    futur: {
+                        ko: '매주 운동을 할 거예요.',
+                        fr: 'Je vais faire d’exercice chaque semaine.',
+                        audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1766212730/item_7_futur_iwfn7o.mp3'
+                    },
+                    explanation: "Comme le verbe est ‘하다’, on a complété la phrase en ajoutant ‘ㄹ 거예요’ au radical ‘하’."
+                },
+                // 11. Outro (Unified type 'text')
+                { 
+                    type: 'text', 
+                    title: 'Félicitations !', 
+                    content: 'C\'est tout pour aujourd\'hui ! Le prochain cours, la leçon 4, sera la dernière de ce programme. Dans cette 4ème leçon, vous pourrez écrire et dire vos propres résolutions. À bientôt !',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1766212776/audio_4_rnghxd.mp3'
+                }
+            ];
+            
+            const totalPages = pages.length;
+            
+            // --- Naver API Logic ---
+            let mediaRecorder, audioChunks = [], isRecording = false, recordingTimeout;
+
+            async function startRecording(pageIndex) {
+                const attemptKey = `page-${pageIndex}`;
+                if ((attempts[attemptKey] || 0) >= MAX_ATTEMPTS) return; 
+                stopAllAudio();
+
+                if (!navigator.mediaDevices) { alert("Microphone non supporté"); return; }
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    isRecording = true; audioChunks = [];
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                    
+                    const btn = document.getElementById(`mic-btn-${pageIndex}`);
+                    const status = document.getElementById(`speech-status-${pageIndex}`);
+                    
+                    mediaRecorder.onstart = () => {
+                        if(btn) btn.classList.add('recording');
+                        if(status) { status.textContent = "J'écoute..."; status.className = 'feedback-message text-center text-gray-300'; }
+                        clearTimeout(recordingTimeout);
+                        recordingTimeout = setTimeout(() => { if (isRecording) stopRecording(pageIndex); }, MAX_RECORD_TIME); 
+                    };
+                    mediaRecorder.onstop = () => {
+                        isRecording = false; clearTimeout(recordingTimeout);
+                        if(btn) { btn.classList.remove('recording'); btn.classList.add('loading'); }
+                        if(status) status.textContent = "Évaluation...";
+                        const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+                        const reader = new FileReader();
+                        reader.readAsDataURL(blob);
+                        reader.onloadend = () => handleEvaluation(pageIndex, reader.result);
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+                    mediaRecorder.start();
+                } catch (err) { console.error(err); alert("Erreur microphone"); }
+            }
+
+            function stopRecording(pageIndex) { clearTimeout(recordingTimeout); if (mediaRecorder && isRecording) mediaRecorder.stop(); }
+
+            async function handleEvaluation(pageIndex, audioBase64) {
+                const data = pages[pageIndex];
+                const btn = document.getElementById(`mic-btn-${pageIndex}`);
+                const status = document.getElementById(`speech-status-${pageIndex}`);
+                const attemptKey = `page-${pageIndex}`;
+                
+                if (!attempts[attemptKey]) attempts[attemptKey] = 0;
+                attempts[attemptKey]++;
+
+                try {
+                    const referenceText = data.futur ? data.futur.ko : data.ko;
+
+                    const res = await fetch(CLOVA_API_FUNCTION_URL, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ audioBase64: audioBase64, languageCode: "Kor", referenceText: referenceText })
+                    });
+                    if (!res.ok) throw new Error("API Error");
+                    const result = await res.json();
+                    const score = result.assessment?.pronunciation_score || 0;
+                    
+                    if (score >= 80) {
+                        if(correctSound) correctSound.triggerAttackRelease('C5', '0.2s');
+                        if(status) { status.innerHTML = `Très bien ! (Score: ${score})`; status.className = 'feedback-message text-center text-green-400'; }
+                        if(btn) btn.disabled = true;
+                    } else {
+                        if(wrongSound) wrongSound.triggerAttackRelease('A#2', '0.2s');
+                        let msg = `Réessayez (Score: ${score})`;
+                        if (attempts[attemptKey] >= MAX_ATTEMPTS) { msg = "Tentatives épuisées."; if(btn) btn.disabled = true; }
+                        if(status) { status.textContent = msg; status.className = 'feedback-message text-center text-red-400'; }
+                    }
+                } catch (e) {
+                    console.error(e);
+                    if(status) status.textContent = "Erreur de connexion";
+                } finally {
+                    if(btn) btn.classList.remove('loading');
+                }
+            }
+
+            // --- Navigation & Rendering ---
+            window.goToPage = function(index) {
+                currentPage = index;
+                renderPage();
+                
+                if (index === pages.length - 1) { 
+                    if (completionSynth) completionSynth.triggerAttackRelease(["C5", "E5", "G5", "C6"], "4n");
+                    window.parent.postMessage({ type: 'lesson_complete' }, '*');
+                } else {
+                    playPageTurnSound();
+                }
+            }
+
+            window.prevPage = function() {
+                if (currentPage > 0) goToPage(currentPage - 1);
+            }
+
+            window.nextPage = function() {
+                if (currentPage < pages.length - 1) goToPage(currentPage + 1);
+            }
+
+            function playPageTurnSound() {
+                if (pageTurnSynth) pageTurnSynth.triggerAttackRelease("C5", "8n", Tone.now());
+            }
+
+            function renderPage() {
+                if (audioPlayTimeout) { clearTimeout(audioPlayTimeout); audioPlayTimeout = null; }
+                stopAllAudio();
+
+                const data = pages[currentPage];
+                const content = document.getElementById('page-content');
+                const nav = document.getElementById('navigation');
+                content.innerHTML = '';
+                
+                // Dynamic padding
+                const isNavHidden = (currentPage === pages.length - 1); // Last page
+                const paddingBottom = isNavHidden ? 'pb-6' : 'pb-24'; 
+                content.className = `flex flex-col flex-grow p-6 overflow-y-auto ${paddingBottom} text-slate-100 w-full`;
+
+                const innerWrapper = document.createElement('div');
+                innerWrapper.className = 'w-full max-w-2xl my-auto flex flex-col items-center';
+
+                if (data.audioFr && !data.audioFr.startsWith('URL_')) {
+                    audioPlayTimeout = setTimeout(() => {
+                        const a = new Audio(data.audioFr);
+                        currentPlayingAudio = a;
+                        a.play().catch(e => console.warn(e));
+                        a.onended = () => { if(currentPlayingAudio === a) currentPlayingAudio = null; };
+                    }, 1000);
+                }
+
+                if (data.type === 'cover') {
+                    if(data.image) {
+                        const img = document.createElement('img'); img.src = data.image;
+                        img.className = "w-32 h-32 mb-6 rounded-2xl shadow-lg border-4 border-amber-400 bg-white object-cover";
+                        innerWrapper.appendChild(img);
+                    }
+                    const h1 = document.createElement('h1'); h1.className = "text-3xl font-bold text-center mb-4"; h1.innerText = data.title;
+                    innerWrapper.appendChild(h1);
+                    const p = document.createElement('p'); p.className = "text-center text-gray-300"; p.innerText = data.subtitle;
+                    innerWrapper.appendChild(p);
+                    nav.style.display = 'flex';
+                }
+                else if (data.type === 'text') {
+                    if (data.title) {
+                        const h1 = document.createElement('h1'); h1.className = "text-3xl font-bold mb-6 text-center"; h1.innerText = data.title;
+                        innerWrapper.appendChild(h1);
+                    }
+                    const p = document.createElement('p'); p.className = "text-xl text-center leading-relaxed whitespace-pre-line"; p.innerText = data.content;
+                    innerWrapper.appendChild(p);
+                    
+                    if (currentPage === pages.length - 1) {
+                        nav.style.display = 'none'; // Hide nav on last page
+                    } else {
+                        nav.style.display = 'flex';
+                    }
+                }
+                else if (data.type === 'grammar') {
+                    // Explanation Text
+                    const p = document.createElement('p'); 
+                    p.className = "text-lg text-center mb-6 leading-relaxed"; 
+                    p.innerText = data.content;
+                    innerWrapper.appendChild(p);
+
+                    // Rules List
+                    if (data.rules && data.rules.length > 0) {
+                        const ul = document.createElement('ul');
+                        ul.className = "w-full text-left bg-indigo-900/50 p-4 rounded-xl mb-6 space-y-2 text-sm sm:text-base border border-indigo-700";
+                        data.rules.forEach(rule => {
+                            const li = document.createElement('li');
+                            li.className = "flex gap-2";
+                            li.innerHTML = `<span class="text-amber-400">•</span> <span>${rule}</span>`;
+                            ul.appendChild(li);
+                        });
+                        innerWrapper.appendChild(ul);
+                    }
+
+                    // Examples Cards
+                    if (data.examples && data.examples.length > 0) {
+                        const exContainer = document.createElement('div');
+                        exContainer.className = "w-full grid gap-3";
+                        data.examples.forEach(ex => {
+                            const card = document.createElement('div');
+                            card.className = "bg-white text-gray-800 p-4 rounded-xl shadow-md flex flex-col items-center text-center gap-2";
+                            
+                            if (ex.audio) {
+                                const audioBtn = document.createElement('button');
+                                audioBtn.className = "action-btn btn-compact bg-indigo-600 text-white hover:bg-indigo-700 shadow-md w-auto px-4";
+                                audioBtn.innerHTML = `Écoutez <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ml-2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>`;
+                                audioBtn.onclick = () => playAudio(ex.audio);
+                                card.appendChild(audioBtn);
+                            }
+
+                            const ko = document.createElement('div'); ko.className = "text-xl font-bold text-indigo-900"; ko.innerText = ex.ko;
+                            const fr = document.createElement('div'); fr.className = "text-sm text-gray-500"; fr.innerText = ex.fr;
+                            card.appendChild(ko); card.appendChild(fr);
+                            exContainer.appendChild(card);
+                        });
+                        innerWrapper.appendChild(exContainer);
+                    }
+                    nav.style.display = 'flex';
+                }
+                else if (data.type === 'practice') {
+                    if (data.content) {
+                        const introP = document.createElement('p');
+                        introP.className = "text-lg text-center mb-6 leading-relaxed";
+                        introP.innerText = data.content;
+                        innerWrapper.appendChild(introP);
+                    }
+
+                    // 1. Original Phrase Card
+                    const originalCard = document.createElement('div');
+                    originalCard.className = "bg-slate-700/50 border border-slate-600 rounded-xl w-full p-4 flex flex-col items-center mb-2";
+                    
+                    const origKo = document.createElement('h3'); origKo.className = "text-lg font-bold text-slate-200 mb-1"; origKo.innerText = data.original.ko;
+                    const origFr = document.createElement('p'); origFr.className = "text-sm text-slate-400 mb-3"; origFr.innerText = data.original.fr;
+                    originalCard.appendChild(origKo); originalCard.appendChild(origFr);
+
+                    const origAudioBtn = document.createElement('button');
+                    origAudioBtn.className = "action-btn btn-compact bg-slate-600 text-white hover:bg-slate-500 shadow-sm w-auto px-4";
+                    origAudioBtn.innerHTML = `Original <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ml-2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>`;
+                    origAudioBtn.onclick = () => playAudio(data.original.audio);
+                    originalCard.appendChild(origAudioBtn);
+                    innerWrapper.appendChild(originalCard);
+
+                    // Arrow
+                    const arrow = document.createElement('div');
+                    arrow.className = "text-amber-400 text-2xl my-1 animate-bounce";
+                    arrow.innerHTML = "↓";
+                    innerWrapper.appendChild(arrow);
+
+                    // 2. Future Phrase Card
+                    const card = document.createElement('div');
+                    card.className = "bg-white rounded-2xl shadow-xl w-full p-6 text-gray-800 flex flex-col items-center gap-4 mb-4";
+
+                    const ko = document.createElement('h2'); ko.className = "text-2xl font-bold text-indigo-900 text-center"; ko.innerText = data.futur.ko;
+                    const fr = document.createElement('p'); fr.className = "text-gray-500 text-center text-sm"; fr.innerText = data.futur.fr;
+                    card.appendChild(ko); card.appendChild(fr);
+
+                    // Audio
+                    const audioBtn = document.createElement('button');
+                    audioBtn.className = "action-btn btn-default bg-indigo-600 text-white hover:bg-indigo-700 shadow-md";
+                    audioBtn.innerHTML = 'Écoutez <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ml-2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>';
+                    audioBtn.onclick = () => playAudio(data.futur.audio);
+                    card.appendChild(audioBtn);
+
+                    // Speech
+                    const speechDiv = document.createElement('div');
+                    speechDiv.className = "w-full flex flex-col items-center gap-2";
+                    const micBtn = document.createElement('button');
+                    micBtn.id = `mic-btn-${currentPage}`;
+                    micBtn.className = "action-btn btn-default bg-sky-600 text-white hover:bg-sky-500 shadow-md mic-btn";
+                    micBtn.innerHTML = `Répétez <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ml-2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>`;
+                    
+                    const attemptKey = `page-${currentPage}`;
+                    if((attempts[attemptKey] || 0) >= MAX_ATTEMPTS) micBtn.disabled = true;
+
+                    micBtn.onclick = () => {
+                        if(isRecording) stopRecording(currentPage);
+                        else startRecording(currentPage);
+                    };
+                    const status = document.createElement('p');
+                    status.id = `speech-status-${currentPage}`;
+                    status.className = "feedback-message text-center text-gray-400";
+                    
+                    speechDiv.appendChild(micBtn);
+                    speechDiv.appendChild(status);
+                    card.appendChild(speechDiv);
+                    innerWrapper.appendChild(card);
+
+                    // 3. Explanation Box
+                    if(data.explanation) {
+                        const expBox = document.createElement('div');
+                        expBox.className = "w-full bg-indigo-900/30 border border-indigo-500/30 p-4 rounded-xl text-sm text-indigo-100 text-center";
+                        expBox.innerHTML = `<span class="font-bold text-amber-400">Note:</span> ${data.explanation}`;
+                        innerWrapper.appendChild(expBox);
+                    }
+
+                    nav.style.display = 'flex';
+                }
+
+                // Add wrapper to main content
+                content.appendChild(innerWrapper);
+
+                // Nav Buttons Logic
+                const prevBtn = document.getElementById('prev-btn');
+                const nextBtn = document.getElementById('next-btn');
+                const progress = document.getElementById('progress-indicator');
+                
+                prevBtn.disabled = (currentPage === 0);
+                
+                if (currentPage === pages.length - 1) {
+                    nextBtn.style.display = 'none';
+                } else {
+                    nextBtn.style.display = 'block';
+                    nextBtn.innerText = "Suivant";
+                    nextBtn.className = "bg-white text-indigo-900 font-bold py-2 px-5 rounded-full shadow-lg transition duration-300 hover:bg-gray-200 text-sm sm:text-base";
+                    nextBtn.disabled = false;
+                    nextBtn.style.opacity = '1';
+                    nextBtn.style.cursor = 'pointer';
+                }
+
+                let pct = (currentPage / (pages.length - 1)) * 100;
+                progress.style.width = `${pct}%`;
+            }
+
+            document.getElementById('prev-btn').addEventListener('click', window.prevPage);
+            document.getElementById('next-btn').addEventListener('click', window.nextPage);
+            renderPage();
+        });
+    </script>
+</body>
+</html>
