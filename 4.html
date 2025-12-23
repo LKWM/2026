@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cours de Coréen - Leçon 4</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js for audio synthesis -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        /* Base styles */
+        body {
+            font-family: 'Inter', 'Nanum Gothic', sans-serif;
+            overflow: hidden;
+            background-color: #0f172a; /* Slate 900 */
+        }
+        
+        #app-container {
+            width: 100%;
+            max-width: 1000px;
+            background-color: #172554; /* blue-950 */
+            border-radius: 1rem;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3), 0 8px 10px -6px rgb(0 0 0 / 0.3);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            border: 1px solid #1e3a8a;
+            position: relative;
+        }
+
+        #page-content {
+            flex-grow: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            padding-bottom: 6rem; 
+            color: #f1f5f9; /* slate-100 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Scrollbar styling */
+        #page-content::-webkit-scrollbar { width: 8px; }
+        #page-content::-webkit-scrollbar-track { background: #1e293b; }
+        #page-content::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+
+        /* Mic Button Styles */
+        .mic-btn { transition: all 0.2s ease-in-out; }
+        .mic-btn.recording {
+            background-color: #ef4444 !important;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.4);
+        }
+        .mic-btn.loading {
+            background-color: #6b7280 !important;
+            cursor: not-allowed;
+            animation: pulse 1.5s infinite ease-in-out;
+        }
+        .mic-btn:disabled {
+            background-color: #9ca3af !important;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .nav-container {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            padding: 1rem;
+            background-color: #172554;
+            border-top: 1px solid #1e3a8a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            z-index: 10;
+        }
+        @media (min-width: 640px) { .nav-container { padding: 1.5rem; } }
+
+        #next-btn:disabled, #prev-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .feedback-message {
+            min-height: 1.5rem;
+            font-weight: 600;
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        /* Unified Button Class */
+        .action-btn {
+            width: 100%;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 9999px; font-weight: 700; transition: all 0.2s;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); gap: 0.5rem;
+        }
+        .action-btn:active { transform: scale(0.98); }
+        .btn-default { height: 3rem; font-size: 1rem; }
+        .btn-compact { height: 2.5rem; font-size: 0.875rem; }
+
+        /* Word Puzzle Styles */
+        .word-chip {
+            background-color: #fff;
+            color: #1e3a8a;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: all 0.2s;
+            border: 2px solid transparent;
+            user-select: none;
+        }
+        .word-chip:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .word-chip.selected { border-color: #fbbf24; background-color: #fffbeb; }
+        
+        .drop-zone {
+            min-height: 4rem;
+            border: 2px dashed #64748b;
+            border-radius: 0.75rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 1rem;
+            background-color: rgba(30, 41, 59, 0.5);
+            transition: border-color 0.2s;
+            justify-content: center;
+        }
+
+        /* Selection Card Styles */
+        .selection-card {
+            transition: all 0.2s;
+            cursor: pointer;
+            border: 2px solid transparent;
+            height: 100%;
+        }
+        .selection-card.selected {
+            border-color: #38bdf8; /* sky-400 */
+            background-color: rgba(56, 189, 248, 0.1);
+            transform: scale(1.02);
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen h-screen p-2 sm:p-4">
+
+    <div id="app-container">
+        <div id="page-content"></div>
+
+        <div id="navigation" class="nav-container">
+             <div class="w-32 flex justify-start">
+                 <button id="prev-btn" class="bg-slate-700 text-white font-bold py-2 px-4 rounded-full shadow-lg transition duration-300 hover:bg-slate-600 text-sm sm:text-base hidden">Précédent</button>
+             </div>
+             <div class="flex-grow h-2 bg-slate-700 rounded-full overflow-hidden mx-4">
+                 <div id="progress-indicator" class="h-full bg-amber-400 transition-all duration-300 w-0"></div>
+             </div>
+             <div class="w-32 flex justify-end">
+                 <button id="next-btn" class="bg-white text-indigo-900 font-bold py-2 px-5 rounded-full shadow-lg transition duration-300 hover:bg-gray-200 text-sm sm:text-base">Suivant</button>
+             </div>
+        </div>
+    </div>
+
+    <!-- Modal for Hints -->
+    <div id="hint-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center z-50 p-4">
+        <div class="bg-slate-800 border border-slate-600 rounded-xl p-6 max-w-md w-full text-center shadow-2xl">
+            <h3 class="text-xl font-bold text-amber-400 mb-4">Indice (Hint)</h3>
+            <p id="hint-text" class="text-white text-lg mb-6"></p>
+            <button onclick="closeHint()" class="bg-indigo-600 text-white px-6 py-2 rounded-full font-bold hover:bg-indigo-500">Compris !</button>
+        </div>
+    </div>
+
+    <script>
+        const MAX_RECORD_TIME = 7000;
+        const MAX_ATTEMPTS = 3;
+        const MAX_SELECTIONS = 3;
+        let currentPlayingAudio = null;
+
+        // --- DATA & STATE ---
+        const ITEMS_DB = [
+            { id: 1, ko: '매일 한국어를 공부하다', fr: 'étudier le coréen tous les jours', parts: ['매일', '한국어를', '공부할', '거예요'] },
+            { id: 2, ko: '한국에 여행을 가다', fr: 'voyager en Corée du Sud', parts: ['한국에', '여행을', '갈', '거예요'] },
+            { id: 3, ko: '책을 많이 읽다', fr: 'Lire beaucoup de livres', parts: ['책을', '많이', '읽을', '거예요'] },
+            { id: 4, ko: '다이어트를 하다', fr: 'Faire un régime', parts: ['다이어트를', '할', '거예요'] },
+            { id: 5, ko: '담배를 끊다', fr: 'Arrêter de fumer', parts: ['담배를', '끊을', '거예요'] },
+            { id: 6, ko: '취직에 성공하다', fr: 'Chercher un emploi', parts: ['취직에', '성공할', '거예요'] },
+            { id: 7, ko: '매주 운동을 하다', fr: 'Faire d’exercice chaque semaine', parts: ['매주', '운동을', '할', '거예요'] }
+        ];
+
+        const WORD_POOL_SOURCE = [
+            "2026년에는", "올해에는", "새해에는", "내년에는", 
+            "매일", "한국어를", "공부할", "거예요", 
+            "한국에", "여행을", "갈", 
+            "책을", "많이", "읽을", 
+            "다이어트를", "할", 
+            "담배를", "끊을", 
+            "취직에", "성공할", 
+            "매주", "운동을", 
+            "해요", "읽어요", "공부해요", "성공해요", "끊어요"
+        ];
+
+        // State variables
+        let selectedResolutionIds = [];
+        let pages = [];
+        let currentPage = 0;
+        let attempts = {};
+        let puzzleAttempts = {}; 
+        let soundsReady = false;
+        let audioPlayTimeout = null;
+        let lastPlayedPage = -1; // To track if we already played audio for this page index
+        
+        const BASE_44_ORIGIN = "https://coreeno.base44.app"; 
+        const CLOVA_API_FUNCTION_URL = BASE_44_ORIGIN + '/api/functions/naverClovaSpeech';
+        
+        let pageTurnSynth, correctSound, wrongSound, completionSynth;
+
+        // --- AUDIO ENGINE ---
+        function stopAllAudio() {
+            if (currentPlayingAudio) {
+                currentPlayingAudio.pause();
+                currentPlayingAudio.currentTime = 0;
+                currentPlayingAudio = null;
+            }
+        }
+
+        function playAudio(url) {
+            if (!url || url.startsWith('URL_PLACEHOLDER_')) return;
+            try {
+                stopAllAudio();
+                const audio = new Audio(url);
+                currentPlayingAudio = audio;
+                audio.play().catch(e => console.error("Audio error:", e));
+                audio.onended = () => { if (currentPlayingAudio === audio) currentPlayingAudio = null; };
+            } catch (e) { console.error("Audio creation error:", e); }
+        }
+
+        const initAudioSynth = async () => {
+            if (soundsReady) return;
+            try { 
+                await Tone.start(); 
+                pageTurnSynth = new Tone.Synth().toDestination();
+                completionSynth = new Tone.PolySynth(Tone.Synth).toDestination();
+                correctSound = new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.01, decay: 0.2, sustain: 0.2, release: 0.2 } }).toDestination();
+                wrongSound = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.01, decay: 0.4, sustain: 0.1, release: 0.2 } }).toDestination();
+                soundsReady = true; 
+            } catch (e) { console.error(e); }
+        };
+        document.body.addEventListener('click', initAudioSynth, { once: true });
+        document.body.addEventListener('touchstart', initAudioSynth, { once: true });
+
+        // --- INITIAL PAGES SETUP ---
+        function initializePages() {
+            pages = [
+                // 0. Cover
+                { 
+                    type: 'cover', 
+                    title: 'Leçon supplémentaire - Mes résolutions du Nouvel An', 
+                    subtitle: 'Utilisez les expressions apprises pour exprimer vos résolutions en coréen !',
+                    image: 'https://res.cloudinary.com/de76i94ia/image/upload/v1765700701/Core%CC%81enO_logo_jlp255.png' 
+                },
+                // 1. Selection Page
+                {
+                    type: 'selection',
+                    title: 'Choisissez vos résolutions',
+                    content: "Bonjour! Dans cette leçon, on va utiliser les expressions apprises pour exprimer vos résolutions en coréen.\nSélectionnez vos résolutions pour la nouvelle année parmi les choix suivants. Vous pouvez en choisir jusqu'à 3 maximum !",
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1766391927/audio_1_vky4im.mp3'
+                }
+            ];
+            renderPage();
+        }
+
+        // --- PAGE GENERATION LOGIC ---
+        function generateDynamicPages() {
+            // Keep only Cover and Selection
+            if (pages.length > 2) {
+                pages = pages.slice(0, 2);
+            }
+
+            const audio2 = 'https://res.cloudinary.com/de76i94ia/video/upload/v1766391926/audio_2_pt3aaf.mp3';
+            const audio3 = 'https://res.cloudinary.com/de76i94ia/video/upload/v1766391926/audio_3_eq4sky.mp3';
+
+            // LOOP 1: Generate ALL Puzzle Pages First
+            selectedResolutionIds.forEach((itemId, index) => {
+                const item = ITEMS_DB.find(i => i.id === itemId);
+                let timeExpr, timeFr, introText, audio;
+
+                if (index === 0) {
+                    timeExpr = "2026년에는"; timeFr = "En 2026"; introText = "Résolution 1"; audio = audio2;
+                } else if (index === 1) {
+                    timeExpr = "내년에는"; timeFr = "L'année prochaine"; introText = "Résolution 2"; audio = null; 
+                } else {
+                    timeExpr = "새해에는"; timeFr = "En nouvelle année"; introText = "Résolution 3"; audio = null;
+                }
+
+                const correctSentenceArr = [timeExpr, ...item.parts];
+                const correctSentenceStr = correctSentenceArr.join(' ') + ".";
+
+                pages.push({
+                    type: 'puzzle',
+                    title: introText,
+                    subtitle: "Remettez les mots dans l'ordre pour former une phrase complète.",
+                    audioFr: audio,
+                    frContext: `${timeFr}, je vais ${item.fr.toLowerCase()}`,
+                    timeExpr: timeExpr,
+                    targetItem: item,
+                    correctOrder: correctSentenceArr,
+                    correctSentence: correctSentenceStr
+                });
+            });
+
+            // LOOP 2: Generate ALL Speaking Pages Next
+            selectedResolutionIds.forEach((itemId, index) => {
+                const item = ITEMS_DB.find(i => i.id === itemId);
+                let timeExpr, timeFr;
+
+                if (index === 0) { timeExpr = "2026년에는"; timeFr = "En 2026"; } 
+                else if (index === 1) { timeExpr = "내년에는"; timeFr = "L'année prochaine"; } 
+                else { timeExpr = "새해에는"; timeFr = "En nouvelle année"; }
+
+                const correctSentenceArr = [timeExpr, ...item.parts];
+                const correctSentenceStr = correctSentenceArr.join(' ') + ".";
+
+                pages.push({
+                    type: 'speaking',
+                    title: `À vous de parler !`,
+                    content: "Maintenant, essayez de dire à voix haute la résolution que vous avez choisie !",
+                    audioFr: index === 0 ? audio3 : null,
+                    sentenceKo: correctSentenceStr,
+                    sentenceFr: `${timeFr}, je vais ${item.fr.toLowerCase()}.`
+                });
+            });
+
+            // Outro Page
+            pages.push({
+                type: 'text',
+                title: 'Félicitations !',
+                content: "C'est la fin de ce programme. Vous pouvez désormais exprimer vos résolutions en coréen avec confiance. Partagez vos résolutions sur les réseaux sociaux et taguez #CoréenO ! On se retrouve dans un prochain programme ! Bonne année :)",
+                audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1766391927/audio_4_s6i4mp.mp3'
+            });
+        }
+
+        // --- NAVIGATION UPDATE ---
+        function updateNavigation() {
+            const nav = document.getElementById('navigation');
+            const prevBtn = document.getElementById('prev-btn');
+            const nextBtn = document.getElementById('next-btn');
+            const progress = document.getElementById('progress-indicator');
+            const data = pages[currentPage];
+
+            // 1. Prev Button Logic (Hidden on Cover)
+            if (currentPage === 0) {
+                prevBtn.classList.add('hidden');
+            } else {
+                prevBtn.classList.remove('hidden');
+                prevBtn.disabled = false;
+            }
+
+            // 2. Next Button Logic
+            nextBtn.style.display = 'block';
+            nextBtn.disabled = false;
+            
+            if (data.type === 'cover') {
+                nextBtn.innerText = "Suivant";
+            } else if (data.type === 'selection') {
+                 if (selectedResolutionIds.length === 0) {
+                    nextBtn.disabled = true;
+                    nextBtn.innerText = "Choisissez une résolution";
+                } else {
+                    nextBtn.innerText = "Suivant";
+                }
+            } else if (data.type === 'puzzle') {
+                // Handled in renderPage (hidden initially)
+                nextBtn.innerText = "Suivant"; 
+            } else {
+                nextBtn.innerText = "Suivant";
+            }
+            
+            if (data.type === 'text') {
+                nextBtn.style.display = 'none';
+            }
+
+            // 3. Progress Bar Logic
+            // Estimate total to avoid 100% on page 2. Min total is 5 (1 selection).
+            // If dynamic pages aren't generated yet (on page 0 or 1), assume at least 5 pages.
+            // If generated, use real length.
+            let estimatedTotal = Math.max(pages.length, 5); 
+            // If on selection page and we have 0 selections, estimated is 5. If we have 3, it will be 9. 
+            // Better: just use pages.length if > 2, else use 5.
+            let total = (pages.length > 2) ? pages.length : 5;
+            
+            let pct = (currentPage / (total - 1)) * 100;
+            if (pct > 100) pct = 100;
+            progress.style.width = `${pct}%`;
+        }
+
+        // --- RENDER LOGIC ---
+        function renderPage() {
+            const data = pages[currentPage];
+            const content = document.getElementById('page-content');
+            
+            // Audio logic: Only play if we haven't played it for this page index yet
+            if (data.audioFr && lastPlayedPage !== currentPage) {
+                 if (audioPlayTimeout) clearTimeout(audioPlayTimeout);
+                 stopAllAudio();
+                 audioPlayTimeout = setTimeout(() => {
+                     playAudio(data.audioFr);
+                 }, 800);
+                 lastPlayedPage = currentPage;
+            } else if (lastPlayedPage !== currentPage) {
+                stopAllAudio(); // Stop audio if new page has no audio
+                lastPlayedPage = currentPage;
+            }
+
+            content.innerHTML = '';
+            
+            // Layout Wrapper
+            const isNavHidden = (currentPage === pages.length - 1);
+            const paddingBottom = isNavHidden ? 'pb-6' : 'pb-24'; 
+            content.className = `flex flex-col flex-grow p-4 overflow-y-auto ${paddingBottom} text-slate-100 w-full items-center`;
+            const innerWrapper = document.createElement('div');
+            innerWrapper.className = 'w-full max-w-4xl my-auto flex flex-col items-center'; // increased width for grid
+
+            // --- PAGE TYPE: COVER ---
+            if (data.type === 'cover') {
+                if(data.image) {
+                    const img = document.createElement('img'); img.src = data.image;
+                    img.className = "w-32 h-32 mb-6 rounded-2xl shadow-lg border-4 border-amber-400 bg-white object-cover";
+                    innerWrapper.appendChild(img);
+                }
+                const h1 = document.createElement('h1'); h1.className = "text-3xl font-bold text-center mb-4"; h1.innerText = data.title;
+                innerWrapper.appendChild(h1);
+                const p = document.createElement('p'); p.className = "text-center text-gray-300"; p.innerText = data.subtitle;
+                innerWrapper.appendChild(p);
+            }
+
+            // --- PAGE TYPE: SELECTION ---
+            else if (data.type === 'selection') {
+                const h1 = document.createElement('h1'); h1.className = "text-2xl font-bold mb-2 text-center"; h1.innerText = data.title;
+                innerWrapper.appendChild(h1);
+                const p = document.createElement('p'); p.className = "text-sm text-center mb-6 whitespace-pre-line text-gray-300"; p.innerText = data.content;
+                innerWrapper.appendChild(p);
+
+                // Grid Container 3x3 (max 3 cols)
+                const grid = document.createElement('div');
+                grid.className = "grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-3xl mx-auto place-content-center";
+
+                ITEMS_DB.forEach(item => {
+                    const card = document.createElement('div');
+                    const isSelected = selectedResolutionIds.includes(item.id);
+                    card.className = `selection-card bg-slate-800 p-4 rounded-xl flex flex-col gap-1 relative ${isSelected ? 'selected' : ''}`;
+                    
+                    const ko = document.createElement('div'); ko.className = "font-bold text-indigo-200 text-center"; ko.innerText = item.ko;
+                    const fr = document.createElement('div'); fr.className = "text-xs text-gray-400 text-center"; fr.innerText = item.fr;
+                    
+                    if(isSelected) {
+                        const check = document.createElement('div');
+                        check.className = "absolute top-2 right-2 text-sky-400";
+                        check.innerHTML = `<i class="ph ph-check-circle text-xl"></i>`;
+                        card.appendChild(check);
+                    }
+
+                    // On click: Just toggle selection data and re-render only the checkmarks would be better,
+                    // but re-rendering full page is safer for logic if we handle audio correctly.
+                    card.onclick = () => toggleSelection(item.id);
+                    card.appendChild(ko);
+                    card.appendChild(fr);
+                    grid.appendChild(card);
+                });
+                innerWrapper.appendChild(grid);
+            }
+
+            // --- PAGE TYPE: PUZZLE ---
+            else if (data.type === 'puzzle') {
+                const h2 = document.createElement('h2'); h2.className = "text-xl font-bold text-amber-400 mb-2"; h2.innerText = data.title;
+                innerWrapper.appendChild(h2);
+                
+                const instr = document.createElement('p'); instr.className = "text-sm text-center mb-4 text-gray-400"; instr.innerText = data.subtitle;
+                innerWrapper.appendChild(instr);
+
+                const contextBox = document.createElement('div');
+                contextBox.className = "bg-indigo-900/50 p-4 rounded-lg w-full mb-6 text-center border border-indigo-700";
+                // Removed "Traduisez :"
+                contextBox.innerHTML = `<span class="text-xl font-bold text-white">"${data.frContext}"</span>`;
+                innerWrapper.appendChild(contextBox);
+
+                const puzzleContainer = document.createElement('div');
+                puzzleContainer.className = "w-full flex flex-col gap-4";
+
+                const dropZone = document.createElement('div');
+                dropZone.id = 'drop-zone';
+                dropZone.className = "drop-zone w-full flex flex-wrap items-center justify-center min-h-[80px]";
+                
+                const wordBank = document.createElement('div');
+                wordBank.id = 'word-bank';
+                wordBank.className = "flex flex-wrap gap-2 justify-center p-4 bg-slate-800/50 rounded-xl";
+
+                let currentWords = []; 
+                // --- FIX: LIMIT POOL TO 15 ITEMS INCLUDING CORRECT WORDS ---
+                const correctSet = new Set(data.correctOrder);
+                const distractors = WORD_POOL_SOURCE.filter(w => !correctSet.has(w)).sort(() => Math.random() - 0.5);
+                const needed = Math.max(0, 15 - data.correctOrder.length);
+                const selectedDistractors = distractors.slice(0, needed);
+                const pool = [...data.correctOrder, ...selectedDistractors].sort(() => Math.random() - 0.5);
+                
+                function renderChips() {
+                    dropZone.innerHTML = '';
+                    wordBank.innerHTML = '';
+
+                    if(currentWords.length === 0) {
+                        dropZone.innerHTML = '<span class="text-gray-500 italic text-sm pointer-events-none">Appuyez sur les mots pour construire la phrase</span>';
+                    } else {
+                        currentWords.forEach((word, idx) => {
+                            const chip = createChip(word, true, idx);
+                            dropZone.appendChild(chip);
+                        });
+                    }
+
+                    const availableWords = pool.filter(w => !currentWords.includes(w)); 
+                    availableWords.forEach(word => {
+                        const chip = createChip(word, false);
+                        wordBank.appendChild(chip);
+                    });
+                }
+
+                function createChip(word, inDropZone, index) {
+                    const el = document.createElement('div');
+                    el.className = "word-chip";
+                    el.innerText = word;
+                    el.onclick = () => {
+                        if (inDropZone) {
+                            currentWords.splice(index, 1);
+                        } else {
+                            currentWords.push(word);
+                        }
+                        renderChips();
+                        document.getElementById('validate-puzzle-btn').style.display = 'flex';
+                        document.getElementById('puzzle-feedback').innerHTML = '';
+                    };
+                    return el;
+                }
+
+                puzzleContainer.appendChild(dropZone);
+                puzzleContainer.appendChild(wordBank);
+                innerWrapper.appendChild(puzzleContainer);
+
+                const feedback = document.createElement('div');
+                feedback.id = 'puzzle-feedback';
+                feedback.className = "mt-4 h-12 flex items-center justify-center text-center font-bold text-sm";
+                innerWrapper.appendChild(feedback);
+
+                const valBtn = document.createElement('button');
+                valBtn.id = 'validate-puzzle-btn';
+                valBtn.className = "action-btn btn-default bg-indigo-600 text-white hover:bg-indigo-500 mt-4";
+                valBtn.innerText = "Valider";
+                valBtn.onclick = () => checkPuzzle(currentWords, data, feedback, valBtn);
+                innerWrapper.appendChild(valBtn);
+                
+                renderChips();
+                // We hide the global next button for puzzle until solved
+                setTimeout(() => document.getElementById('next-btn').style.display = 'none', 0);
+            }
+
+            // --- PAGE TYPE: SPEAKING ---
+            else if (data.type === 'speaking') {
+                const h2 = document.createElement('h2'); h2.className = "text-2xl font-bold mb-4 text-center"; h2.innerText = data.title;
+                innerWrapper.appendChild(h2);
+                
+                const p = document.createElement('p'); p.className = "text-center text-gray-400 mb-6"; p.innerText = data.content;
+                innerWrapper.appendChild(p);
+
+                const card = document.createElement('div');
+                card.className = "bg-white rounded-2xl shadow-xl w-full p-6 text-gray-800 flex flex-col items-center gap-4 mb-4";
+
+                const ko = document.createElement('h2'); ko.className = "text-2xl font-bold text-indigo-900 text-center"; ko.innerText = data.sentenceKo;
+                const fr = document.createElement('p'); fr.className = "text-gray-500 text-center text-sm"; fr.innerText = data.sentenceFr;
+                card.appendChild(ko); card.appendChild(fr);
+
+                const speechDiv = document.createElement('div');
+                speechDiv.className = "w-full flex flex-col items-center gap-2 mt-2";
+                const micBtn = document.createElement('button');
+                micBtn.id = `mic-btn-${currentPage}`;
+                micBtn.className = "action-btn btn-default bg-sky-600 text-white hover:bg-sky-500 shadow-md mic-btn";
+                micBtn.innerHTML = `Parlez <i class="ph ph-microphone text-xl ml-2"></i>`;
+                
+                const attemptKey = `page-${currentPage}`;
+                if((attempts[attemptKey] || 0) >= MAX_ATTEMPTS) micBtn.disabled = true;
+
+                micBtn.onclick = () => {
+                    if(isRecording) stopRecording(currentPage);
+                    else startRecording(currentPage, data.sentenceKo);
+                };
+                
+                const status = document.createElement('p');
+                status.id = `speech-status-${currentPage}`;
+                status.className = "feedback-message text-center text-gray-400";
+                
+                speechDiv.appendChild(micBtn);
+                speechDiv.appendChild(status);
+                card.appendChild(speechDiv);
+                innerWrapper.appendChild(card);
+            }
+
+            // --- PAGE TYPE: TEXT/OUTRO ---
+            else if (data.type === 'text') {
+                const h1 = document.createElement('h1'); h1.className = "text-3xl font-bold mb-6 text-center text-amber-400"; h1.innerText = data.title;
+                innerWrapper.appendChild(h1);
+                const p = document.createElement('p'); p.className = "text-xl text-center leading-relaxed whitespace-pre-line"; p.innerText = data.content;
+                innerWrapper.appendChild(p);
+            }
+
+            content.appendChild(innerWrapper);
+            updateNavigation();
+        }
+
+        // --- INTERACTION LOGIC ---
+
+        function toggleSelection(id) {
+            const index = selectedResolutionIds.indexOf(id);
+            if (index > -1) {
+                selectedResolutionIds.splice(index, 1);
+            } else {
+                if (selectedResolutionIds.length < MAX_SELECTIONS) {
+                    selectedResolutionIds.push(id);
+                } else {
+                    return; 
+                }
+            }
+            renderPage(); 
+        }
+
+        function checkPuzzle(userWords, data, feedbackEl, btnEl) {
+            const userSentence = userWords.join('');
+            const expectedSentence = data.correctOrder.join('');
+            
+            const attemptKey = `puzzle-${currentPage}`;
+            if (!puzzleAttempts[attemptKey]) puzzleAttempts[attemptKey] = 0;
+
+            if (userSentence === expectedSentence) {
+                if(correctSound) correctSound.triggerAttackRelease('C5', '0.2s');
+                feedbackEl.innerHTML = '<span class="text-green-400">Correct !</span>';
+                feedbackEl.className = "mt-4 h-12 flex items-center justify-center text-center font-bold text-lg animate-bounce";
+                btnEl.style.display = 'none';
+                
+                // Show Global Next Button
+                const nextBtn = document.getElementById('next-btn');
+                nextBtn.style.display = 'block';
+                
+            } else {
+                if(wrongSound) wrongSound.triggerAttackRelease('A#2', '0.2s');
+                puzzleAttempts[attemptKey]++;
+                
+                let msg = "Essayez de réorganiser l'ordre des mots.";
+                if (userWords.length > 0 && userWords[0] !== data.timeExpr) {
+                    msg = "Quand comptez-vous atteindre votre objectif ? Ajoutez une expression de temps au début !";
+                } else if (userWords.length > 0 && !userWords[userWords.length-1].includes('거예요')) {
+                    msg = "L'objectif n'est pas encore réalisé. Essayez d'utiliser le futur (거예요) à la fin !";
+                } else if (userWords.length < data.correctOrder.length) {
+                    msg = "Il manque des mots. Regardez bien.";
+                }
+
+                if (puzzleAttempts[attemptKey] >= 3) {
+                     feedbackEl.innerHTML = `<span class="text-red-400">Trop d'erreurs. Passons à la suite.</span>`;
+                     setTimeout(() => {
+                         const nextBtn = document.getElementById('next-btn');
+                         nextBtn.style.display = 'block';
+                         window.nextPage();
+                     }, 1500);
+                     return;
+                }
+
+                if (puzzleAttempts[attemptKey] >= 2) {
+                    const hintBtn = document.createElement('button');
+                    hintBtn.className = "text-amber-400 underline text-sm block mt-1";
+                    hintBtn.innerText = "Voir un indice ?";
+                    hintBtn.onclick = () => showHint(data.correctSentence);
+                    feedbackEl.innerHTML = `<div class="flex flex-col items-center"><span class="text-red-400">${msg}</span></div>`;
+                    feedbackEl.firstChild.appendChild(hintBtn);
+                } else {
+                    feedbackEl.innerHTML = `<span class="text-red-400">${msg}</span>`;
+                }
+            }
+        }
+
+        function showHint(text) {
+            document.getElementById('hint-text').innerText = text;
+            document.getElementById('hint-modal').classList.remove('hidden');
+            document.getElementById('hint-modal').classList.add('flex');
+        }
+
+        function closeHint() {
+            document.getElementById('hint-modal').classList.add('hidden');
+            document.getElementById('hint-modal').classList.remove('flex');
+        }
+
+        // --- SPEECH RECOGNITION ---
+        let mediaRecorder, audioChunks = [], isRecording = false, recordingTimeout;
+
+        async function startRecording(pageIndex, referenceText) {
+            const attemptKey = `page-${pageIndex}`;
+            if ((attempts[attemptKey] || 0) >= MAX_ATTEMPTS) return; 
+            stopAllAudio();
+
+            if (!navigator.mediaDevices) { alert("Microphone non supporté"); return; }
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                isRecording = true; audioChunks = [];
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                
+                const btn = document.getElementById(`mic-btn-${pageIndex}`);
+                const status = document.getElementById(`speech-status-${pageIndex}`);
+                
+                mediaRecorder.onstart = () => {
+                    if(btn) {
+                        btn.classList.add('recording');
+                        btn.innerHTML = `J'écoute... <i class="ph ph-waveform text-xl ml-2"></i>`;
+                    }
+                    if(status) { status.textContent = ""; status.className = 'feedback-message text-center text-gray-300'; }
+                    clearTimeout(recordingTimeout);
+                    recordingTimeout = setTimeout(() => { if (isRecording) stopRecording(pageIndex, referenceText); }, MAX_RECORD_TIME); 
+                };
+                mediaRecorder.onstop = () => {
+                    isRecording = false; clearTimeout(recordingTimeout);
+                    if(btn) { 
+                        btn.classList.remove('recording'); btn.classList.add('loading'); 
+                        btn.innerHTML = `Évaluation... <i class="ph ph-spinner animate-spin text-xl ml-2"></i>`;
+                    }
+                    const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+                    const reader = new FileReader();
+                    reader.readAsDataURL(blob);
+                    reader.onloadend = () => handleEvaluation(pageIndex, reader.result, referenceText);
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                mediaRecorder.start();
+            } catch (err) { console.error(err); alert("Erreur microphone"); }
+        }
+
+        function stopRecording(pageIndex, referenceText) { clearTimeout(recordingTimeout); if (mediaRecorder && isRecording) mediaRecorder.stop(); }
+
+        async function handleEvaluation(pageIndex, audioBase64, referenceText) {
+            const btn = document.getElementById(`mic-btn-${pageIndex}`);
+            const status = document.getElementById(`speech-status-${pageIndex}`);
+            const attemptKey = `page-${pageIndex}`;
+            
+            if (!attempts[attemptKey]) attempts[attemptKey] = 0;
+            attempts[attemptKey]++;
+
+            try {
+                const res = await fetch(CLOVA_API_FUNCTION_URL, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ audioBase64: audioBase64, languageCode: "Kor", referenceText: referenceText })
+                });
+                if (!res.ok) throw new Error("API Error");
+                const result = await res.json();
+                const score = result.assessment?.pronunciation_score || 0;
+                
+                if (score >= 80) {
+                    if(correctSound) correctSound.triggerAttackRelease('C5', '0.2s');
+                    if(status) { status.innerHTML = `Très bien ! (Score: ${score})`; status.className = 'feedback-message text-center text-green-400'; }
+                    if(btn) {
+                        btn.disabled = true;
+                        btn.innerHTML = `Terminé <i class="ph ph-check text-xl ml-2"></i>`;
+                    }
+                } else {
+                    if(wrongSound) wrongSound.triggerAttackRelease('A#2', '0.2s');
+                    let msg = `Réessayez (Score: ${score})`;
+                    if (attempts[attemptKey] >= MAX_ATTEMPTS) { 
+                        msg = "Tentatives épuisées."; 
+                        if(btn) { btn.disabled = true; btn.innerHTML = `Terminé`; }
+                    } else {
+                        if(btn) btn.innerHTML = `Répétez <i class="ph ph-microphone text-xl ml-2"></i>`;
+                    }
+                    if(status) { status.textContent = msg; status.className = 'feedback-message text-center text-red-400'; }
+                }
+            } catch (e) {
+                console.error(e);
+                if(status) status.textContent = "Erreur de connexion";
+                if(btn) btn.innerHTML = `Répétez <i class="ph ph-microphone text-xl ml-2"></i>`;
+            } finally {
+                if(btn) btn.classList.remove('loading');
+            }
+        }
+
+        // --- NAVIGATION ---
+        window.goToPage = function(index) {
+            currentPage = index;
+            renderPage();
+            
+            // --- FIX: Correct Sound Logic ---
+            const isLastPage = (index === pages.length - 1);
+            // Verify if it is TRULY the final page (Outro)
+            const isOutro = (pages[index].type === 'text' && index > 0); 
+
+            if (isLastPage && isOutro) {
+                 if (completionSynth) completionSynth.triggerAttackRelease(["C5", "E5", "G5", "C6"], "4n");
+            } else {
+                 if (pageTurnSynth) pageTurnSynth.triggerAttackRelease("C5", "8n", Tone.now());
+            }
+        }
+
+        window.prevPage = function() {
+            if (currentPage > 0) goToPage(currentPage - 1);
+        }
+
+        window.nextPage = function() {
+            if (pages[currentPage].type === 'selection') {
+                generateDynamicPages(); // Generate based on selection
+                goToPage(currentPage + 1);
+            } else {
+                if (currentPage < pages.length - 1) goToPage(currentPage + 1);
+            }
+        }
+
+        document.getElementById('prev-btn').addEventListener('click', window.prevPage);
+        document.getElementById('next-btn').addEventListener('click', window.nextPage);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initializePages();
+        });
+    </script>
+</body>
+</html>
