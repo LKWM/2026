@@ -800,6 +800,7 @@
 
             if (isLastPage && isOutro) {
                  if (completionSynth) completionSynth.triggerAttackRelease(["C5", "E5", "G5", "C6"], "4n");
+                 window.parent.postMessage({ type: 'lesson_complete' }, '*'); // Added postMessage
             } else {
                  if (pageTurnSynth) pageTurnSynth.triggerAttackRelease("C5", "8n", Tone.now());
             }
