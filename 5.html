@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sondage - Mes résolutions pour 2026</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js for audio synthesis -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        /* Base styles */
+        body {
+            font-family: 'Inter', 'Nanum Gothic', sans-serif;
+            overflow: hidden;
+            background-color: #0f172a; /* Slate 900 */
+        }
+        
+        #app-container {
+            width: 100%;
+            max-width: 1000px;
+            background-color: #172554; /* blue-950 */
+            border-radius: 1rem;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3), 0 8px 10px -6px rgb(0 0 0 / 0.3);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            border: 1px solid #1e3a8a;
+            position: relative;
+        }
+
+        #page-content {
+            flex-grow: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            padding-bottom: 6rem; 
+            color: #f1f5f9; /* slate-100 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Scrollbar styling */
+        #page-content::-webkit-scrollbar { width: 8px; }
+        #page-content::-webkit-scrollbar-track { background: #1e293b; }
+        #page-content::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+
+        .nav-container {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            padding: 1rem;
+            background-color: #172554;
+            border-top: 1px solid #1e3a8a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            z-index: 10;
+        }
+        @media (min-width: 640px) { .nav-container { padding: 1.5rem; } }
+
+        #next-btn:disabled, #prev-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Unified Button Class */
+        .action-btn {
+            width: 100%;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 9999px; font-weight: 700; transition: all 0.2s;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); gap: 0.5rem;
+            cursor: pointer;
+        }
+        .action-btn:active { transform: scale(0.98); }
+        .btn-default { height: 3rem; font-size: 1rem; }
+
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen h-screen p-2 sm:p-4">
+
+    <div id="app-container">
+        <div id="page-content"></div>
+
+        <div id="navigation" class="nav-container">
+             <div class="w-32 flex justify-start">
+                 <button id="prev-btn" class="bg-slate-700 text-white font-bold py-2 px-4 rounded-full shadow-lg transition duration-300 hover:bg-slate-600 text-sm sm:text-base hidden">Précédent</button>
+             </div>
+             <div class="flex-grow h-2 bg-slate-700 rounded-full overflow-hidden mx-4">
+                 <div id="progress-indicator" class="h-full bg-amber-400 transition-all duration-300 w-0"></div>
+             </div>
+             <div class="w-32 flex justify-end">
+                 <button id="next-btn" class="bg-white text-indigo-900 font-bold py-2 px-5 rounded-full shadow-lg transition duration-300 hover:bg-gray-200 text-sm sm:text-base">Suivant</button>
+             </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DATA & STATE ---
+        let pages = [];
+        let currentPage = 0;
+        let soundsReady = false;
+        
+        let pageTurnSynth, completionSynth;
+
+        // --- AUDIO ENGINE ---
+        const initAudioSynth = async () => {
+            if (soundsReady) return;
+            try { 
+                await Tone.start(); 
+                pageTurnSynth = new Tone.Synth().toDestination();
+                completionSynth = new Tone.PolySynth(Tone.Synth).toDestination();
+                soundsReady = true; 
+            } catch (e) { console.error(e); }
+        };
+        document.body.addEventListener('click', initAudioSynth, { once: true });
+        document.body.addEventListener('touchstart', initAudioSynth, { once: true });
+
+        // --- INITIAL PAGES SETUP ---
+        function initializePages() {
+            pages = [
+                // Page 1: Cover
+                { 
+                    type: 'cover', 
+                    title: 'Sondage', 
+                    subtitle: 'Vous aviez 3 minutes ? Veuillez partager votre avis sur le programme <Mes résolutions pour 2026>',
+                    image: 'https://res.cloudinary.com/de76i94ia/image/upload/v1765700701/Core%CC%81enO_logo_jlp255.png' 
+                },
+                // Page 2: Survey Content
+                {
+                    type: 'survey',
+                    text: 'Mes résolutions pour 2026 est un programme spécial et intensif de 4 leçons, conçu pour préparer la nouvelle année. Il diffère des cursus habituels de CoréenO par son format court et ciblé.\n\nNous aimerions recueillir vos avis sur ce nouveau format afin de mieux répondre à vos attentes.',
+                    btnText: 'Je participe !',
+                    link: 'https://forms.gle/Mod4z1VHsf4JaMrq6'
+                },
+                // Page 3: Outro
+                {
+                    type: 'text',
+                    title: 'Félicitations pour avoir terminé le programme !',
+                    content: 'Nous espérons que ce programme vous aidera à bien démarrer la nouvelle année.\n\nContinuez à apprendre le coréen avec CoréenO en 2026 !'
+                }
+            ];
+            renderPage();
+        }
+
+        // --- NAVIGATION UPDATE ---
+        function updateNavigation() {
+            const prevBtn = document.getElementById('prev-btn');
+            const nextBtn = document.getElementById('next-btn');
+            const progress = document.getElementById('progress-indicator');
+            const data = pages[currentPage];
+
+            // 1. Prev Button Logic (Hidden on Cover)
+            if (currentPage === 0) {
+                prevBtn.classList.add('hidden');
+            } else {
+                prevBtn.classList.remove('hidden');
+                prevBtn.disabled = false;
+            }
+
+            // 2. Next Button Logic
+            if (data.type === 'text') {
+                nextBtn.style.display = 'none'; // Hide on last page
+            } else {
+                nextBtn.style.display = 'block';
+                nextBtn.innerText = "Suivant";
+            }
+
+            // 3. Progress Bar Logic
+            let pct = (currentPage / (pages.length - 1)) * 100;
+            if (pct > 100) pct = 100;
+            progress.style.width = `${pct}%`;
+        }
+
+        // --- RENDER LOGIC ---
+        function renderPage() {
+            const data = pages[currentPage];
+            const content = document.getElementById('page-content');
+            
+            content.innerHTML = '';
+            
+            // Layout Wrapper
+            const isNavHidden = (currentPage === pages.length - 1);
+            const paddingBottom = isNavHidden ? 'pb-6' : 'pb-24'; 
+            content.className = `flex flex-col flex-grow p-4 overflow-y-auto ${paddingBottom} text-slate-100 w-full items-center`;
+            const innerWrapper = document.createElement('div');
+            innerWrapper.className = 'w-full max-w-2xl my-auto flex flex-col items-center'; 
+
+            // --- PAGE TYPE: COVER ---
+            if (data.type === 'cover') {
+                if(data.image) {
+                    const img = document.createElement('img'); img.src = data.image;
+                    img.className = "w-32 h-32 mb-6 rounded-2xl shadow-lg border-4 border-amber-400 bg-white object-cover";
+                    innerWrapper.appendChild(img);
+                }
+                const h1 = document.createElement('h1'); h1.className = "text-3xl font-bold text-center mb-4"; h1.innerText = data.title;
+                innerWrapper.appendChild(h1);
+                const p = document.createElement('p'); p.className = "text-center text-gray-300 text-lg"; p.innerText = data.subtitle;
+                innerWrapper.appendChild(p);
+            }
+
+            // --- PAGE TYPE: SURVEY ---
+            else if (data.type === 'survey') {
+                const p = document.createElement('p'); 
+                p.className = "text-lg text-center mb-10 leading-relaxed whitespace-pre-line text-slate-200"; 
+                p.innerText = data.text;
+                innerWrapper.appendChild(p);
+
+                const linkBtn = document.createElement('a');
+                linkBtn.href = data.link;
+                linkBtn.target = "_blank"; // Open in new tab
+                linkBtn.className = "action-btn btn-default bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg text-xl no-underline";
+                linkBtn.innerHTML = `${data.btnText} <i class="ph ph-arrow-square-out text-2xl ml-2"></i>`;
+                innerWrapper.appendChild(linkBtn);
+            }
+
+            // --- PAGE TYPE: TEXT/OUTRO ---
+            else if (data.type === 'text') {
+                const h1 = document.createElement('h1'); h1.className = "text-2xl sm:text-3xl font-bold mb-8 text-center text-amber-400 leading-tight"; h1.innerText = data.title;
+                innerWrapper.appendChild(h1);
+                const p = document.createElement('p'); p.className = "text-lg sm:text-xl text-center leading-relaxed whitespace-pre-line"; p.innerText = data.content;
+                innerWrapper.appendChild(p);
+            }
+
+            content.appendChild(innerWrapper);
+            updateNavigation();
+        }
+
+        // --- NAVIGATION ---
+        window.goToPage = function(index) {
+            currentPage = index;
+            renderPage();
+            
+            const isLastPage = (index === pages.length - 1);
+
+            if (isLastPage) {
+                 if (completionSynth) completionSynth.triggerAttackRelease(["C5", "E5", "G5", "C6"], "4n");
+                 window.parent.postMessage({ type: 'lesson_complete' }, '*'); 
+            } else {
+                 if (pageTurnSynth) pageTurnSynth.triggerAttackRelease("C5", "8n", Tone.now());
+            }
+        }
+
+        window.prevPage = function() {
+            if (currentPage > 0) goToPage(currentPage - 1);
+        }
+
+        window.nextPage = function() {
+            if (currentPage < pages.length - 1) goToPage(currentPage + 1);
+        }
+
+        document.getElementById('prev-btn').addEventListener('click', window.prevPage);
+        document.getElementById('next-btn').addEventListener('click', window.nextPage);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initializePages();
+        });
+    </script>
+</body>
+</html>
